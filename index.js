@@ -183,7 +183,8 @@ const processingMessages = new Set();
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
-  if (!message.content.startsWith('!')) return;
+  const first = message.content[0];
+  if (first !== '!' && first !== '\uFF01') return; // 반각/전각 !
 
   // 중복 실행 방지
   const messageKey = `${message.id}-${message.author.id}`;
@@ -197,8 +198,10 @@ client.on('messageCreate', async (message) => {
     processingMessages.delete(messageKey);
   }, 5000);
 
-  const command = message.content.split(' ')[0].toLowerCase();
-  const args = message.content.slice(command.length).trim().split(' ');
+  let command = message.content.split(/\s+/)[0];
+  if (command.startsWith('\uFF01')) command = '!' + command.slice(1); // 전각 ! → 반각
+  command = command.toLowerCase();
+  const args = message.content.slice(message.content.split(/\s+/)[0].length).trim().split(/\s+/).filter(Boolean);
 
   try {
     switch (command) {
@@ -1013,31 +1016,48 @@ const USABLE_ITEMS = {
 };
 
 async function handleUseItem(message, args) {
-  const itemName = args.join(' ').trim();
-  if (!itemName) {
-    return message.reply('사용할 아이템 이름을 입력하세요. (예: `!사용 모험기록`)');
+  try {
+    const itemName = args.join(' ').trim();
+    if (!itemName) {
+      await message.reply('사용할 아이템 이름을 입력하세요. (예: `!사용 모험기록`)');
+      return;
+    }
+    const userId = message.author.id;
+    const inventory = db.getInventory(userId);
+    const entry = inventory.find(i =>
+      i.item_name === itemName ||
+      (itemName === '랜덤박스' && i.item_name === '랜덤 박스') ||
+      (itemName === '랜덤 박스' && i.item_name === '랜덤박스')
+    );
+    if (!entry || entry.quantity < 1) {
+      await message.reply(`**${itemName}**을(를) 보유하고 있지 않습니다.`);
+      return;
+    }
+    const handlerKey = (itemName === '랜덤 박스' ? '랜덤박스' : itemName);
+    const handler = USABLE_ITEMS[handlerKey];
+    if (!handler || !handler.effect) {
+      await message.reply('사용할 수 없는 아이템입니다.');
+      return;
+    }
+    const result = handler.effect(message, userId, { actualItemName: entry.item_name });
+    if (!result || typeof result !== 'object') {
+      await message.reply('아이템 사용 처리 중 오류가 발생했습니다.');
+      return;
+    }
+    if (!result.ok) {
+      await message.reply(result.message);
+      return;
+    }
+    const embed = new EmbedBuilder()
+      .setTitle('아이템 사용')
+      .setDescription(result.description)
+      .setColor(result.color ?? 0x3498DB)
+      .setTimestamp();
+    await message.reply({ embeds: [embed] });
+  } catch (err) {
+    console.error('[!사용] 오류:', err);
+    await message.reply('아이템 사용 중 오류가 발생했습니다.').catch(() => {});
   }
-  const userId = message.author.id;
-  const inventory = db.getInventory(userId);
-  const entry = inventory.find(i => i.item_name === itemName || (itemName === '랜덤박스' && i.item_name === '랜덤 박스'));
-  if (!entry || entry.quantity < 1) {
-    return message.reply(`**${itemName}**을(를) 보유하고 있지 않습니다.`);
-  }
-  const handlerKey = (itemName === '랜덤 박스' ? '랜덤박스' : itemName);
-  const handler = USABLE_ITEMS[handlerKey];
-  if (!handler || !handler.effect) {
-    return message.reply('사용할 수 없는 아이템입니다.');
-  }
-  const result = handler.effect(message, userId, { actualItemName: entry.item_name });
-  if (!result.ok) {
-    return message.reply(result.message);
-  }
-  const embed = new EmbedBuilder()
-    .setTitle('아이템 사용')
-    .setDescription(result.description)
-    .setColor(result.color ?? 0x3498DB)
-    .setTimestamp();
-  message.reply({ embeds: [embed] });
 }
 
 // 상점 구매 처리
