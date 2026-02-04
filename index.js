@@ -429,7 +429,7 @@ async function handleCharacter(message) {
     .setTitle(`👤 ${character.name}`)
     .addFields(
       { name: '레벨', value: `${character.level}`, inline: true },
-      { name: '경험치', value: `${character.exp}/${(character.level + 1) * 5}`, inline: true },
+      { name: '경험치', value: `${character.exp}/${db.getRequiredExpForLevel(character.level)}`, inline: true },
       { name: '닢', value: `${Math.max(0, user.dust || 0)}`, inline: true },
       { name: '체력', value: `${character.current_hp}/${character.max_hp}`, inline: true },
       { name: '공격력', value: `${character.attack + attackBonus}${attackBonus > 0 ? ` (+${attackBonus})` : ''}`, inline: true },
@@ -1006,7 +1006,7 @@ const USABLE_ITEMS = {
       db.removeItem(userId, '모험기록', 1);
       const levelResult = db.addExp(userId, 3);
       const char = db.getOrCreateCharacter(userId);
-      let desc = `📜 **모험기록**을 읽었습니다!\n\n✨ 경험치 +3\n현재: ${char.exp}/${(char.level + 1) * 5} EXP`;
+      let desc = `📜 **모험기록**을 읽었습니다!\n\n✨ 경험치 +3\n현재: ${char.exp}/${db.getRequiredExpForLevel(char.level)} EXP`;
       if (levelResult.leveledUp) {
         desc += `\n\n🎉 **레벨 업!** Lv.${levelResult.oldLevel} → Lv.${levelResult.newLevel}`;
       }

@@ -242,15 +242,19 @@ function enhanceWeapon(id, success, destroyed) {
   return { success: false, destroyed: false };
 }
 
+// 레벨업 필요 경험치: 5, 10, 20, 35, 55, 80, … (차이 +5, +10, +15 …)
+function getRequiredExpForLevel(level) {
+  return 5 + 5 * level * (level + 1) / 2;
+}
+
 function addExp(id, amount) {
   const char = getOrCreateCharacter(id);
   const oldLevel = char.level;
   let newExp = char.exp + amount;
   let newLevel = char.level;
   
-  // 레벨업 체크 (최대 레벨 20)
   while (newLevel < 20) {
-    const requiredExp = (newLevel + 1) * 5;
+    const requiredExp = getRequiredExpForLevel(newLevel);
     if (newExp >= requiredExp) {
       newExp -= requiredExp;
       newLevel++;
@@ -427,7 +431,7 @@ module.exports = {
   getOrCreateUser, getOrCreateCharacter, addDust, subtractDust, setAttendance,
   resetExplorationCount, incrementExploration, addItem, removeItem, getInventory,
   getWeapon, equipWeapon, enhanceWeapon,
-  addExp, updateCharacterName, resetBattleCount, incrementBattle, getBattleCount,
+  addExp, getRequiredExpForLevel, updateCharacterName, resetBattleCount, incrementBattle, getBattleCount,
   findUserByName, getRandomCharacterId, decreaseHp, healHp, fullHeal, checkDailyHeal,
   enterDungeon, exitDungeon, resetDungeon,
   advanceDungeonFloor, getDungeonFloor, isInDungeon,
