@@ -55,40 +55,28 @@ function calculateAttendanceReward() {
 
 // 탐험 보상 계산
 function calculateExplorationReward() {
-  // 먼지 계산
   const dustRand = Math.random() * 100;
   let dust;
+  if (dustRand < 2) dust = 5000;
+  else dust = Math.floor(Math.random() * 901) + 100;
   
-  // 낮은 확률로 5000먼지 (약 2%)
-  if (dustRand < 2) {
-    dust = 5000;
-  } else {
-    // 기본 100~1000 먼지
-    dust = Math.floor(Math.random() * 901) + 100;
-  }
-  
-  // 아이템 계산 (독립적인 확률, 약 5%)
   const itemRand = Math.random() * 100;
   let item = null;
-  
   if (itemRand < 5) {
-    const items = ['랜덤 박스', '강화석', '회복포션', '마나포션', '공략집'];
+    const items = ['랜덤 박스', '조약돌', '나무열매', '모험기록'];
     item = items[Math.floor(Math.random() * items.length)];
   }
-  
   return { dust, item };
 }
 
 // Gemini API로 탐험 코멘트 생성
 async function generateExplorationComment() {
   if (!genAI) {
-    // Gemini API 키가 없으면 기본 코멘트 반환
     const defaultComments = [
-      '신비로운 동굴을 탐험했습니다.',
-      '오래된 유적지를 발견했습니다.',
-      '숨겨진 보물을 찾았습니다.',
-      '위험한 던전을 탐험했습니다.',
-      '고대의 비밀을 밝혀냈습니다.'
+      '나뭇잎이 흩어진 숲길을 걸었습니다.',
+      '작은 골목을 탐험했습니다.',
+      '땅굴 입구를 찾았습니다.',
+      '도마뱀이 지나간 자리를 봤습니다.'
     ];
     return defaultComments[Math.floor(Math.random() * defaultComments.length)];
   }
@@ -108,19 +96,21 @@ async function generateExplorationComment() {
     
     return text;
   } catch (error) {
-    console.error('Gemini API 오류:', error.message || error);
-    // 오류 발생 시 기본 코멘트 반환
+    const msg = (error && typeof error.message === 'string' ? error.message : '') || String(error);
+    const full = msg + String(error);
+    const isQuota = /429|quota|Too Many Requests/i.test(full);
+    if (isQuota) {
+      console.warn('[Gemini] 할당량 초과로 기본 코멘트 사용 (탐험). 잠시 후 재시도되거나 결제/플랜을 확인하세요.');
+    } else {
+      console.error('Gemini API 오류:', msg);
+    }
     const defaultComments = [
-      '신비로운 동굴을 탐험했습니다.',
-      '오래된 유적지를 발견했습니다.',
-      '숨겨진 보물을 찾았습니다.',
-      '위험한 던전을 탐험했습니다.',
-      '고대의 비밀을 밝혀냈습니다.',
-      '마법의 숲을 지나갔습니다.',
-      '용의 둥지를 발견했습니다.',
-      '고대 신전의 문을 열었습니다.',
-      '보물 상자를 발견했습니다.',
-      '몬스터와 조우했습니다.'
+      '나뭇잎이 흩어진 숲길을 걸었습니다.',
+      '작은 골목을 탐험했습니다.',
+      '빗물이 고인 웅덩이를 발견했습니다.',
+      '땅굴 입구를 찾았습니다.',
+      '도마뱀이 지나간 자리를 봤습니다.',
+      '멧쥐가 먹다 남긴 나뭇열매를 찾았습니다.'
     ];
     return defaultComments[Math.floor(Math.random() * defaultComments.length)];
   }
@@ -193,18 +183,6 @@ client.on('messageCreate', async (message) => {
       case '!무기강화':
         await handleEnhanceWeapon(message);
         break;
-      case '!스킬':
-        await handleSkill(message);
-        break;
-      case '!스킬선택':
-        await handleSkillSelect(message, args);
-        break;
-      case '!스킬이름':
-        await handleSkillName(message, args);
-        break;
-      case '!스킬강화':
-        await handleEnhanceSkill(message, args);
-        break;
       case '!보내기':
         await handleSend(message, args);
         break;
@@ -226,17 +204,14 @@ client.on('messageCreate', async (message) => {
       case '!회복':
         await handleHeal(message);
         break;
-      case '!마나회복':
-        await handleManaHeal(message);
-        break;
-      case '!던전':
+      case '!땅굴':
         if (db.isInDungeon(message.author.id)) {
           await handleDungeonExplore(message);
         } else {
           await handleDungeon(message);
         }
         break;
-      case '!던전탈출':
+      case '!땅굴탈출':
         await handleDungeonExit(message);
         break;
     }
@@ -272,7 +247,7 @@ async function handleAttendance(message) {
   
   const embed = new EmbedBuilder()
     .setTitle('출석 완료!')
-    .setDescription(`${character.name}이(가) 먼지 길드에 모습을 보였습니다.\n\n${reward}먼지를 획득했습니다!\n\n보유 먼지: ${displayDust}먼지`)
+    .setDescription(`${character.name}이(가) 닢 길드에 모습을 보였습니다.\n\n${reward}닢을 획득했습니다!\n\n보유 닢: ${displayDust}닢`)
     .setColor(0x00FF00)
     .setTimestamp();
   
@@ -322,12 +297,12 @@ async function handleExploration(message) {
     .setTimestamp();
   
   let description = `📖 ${explorationComment}\n\n`;
-  description += `💰 ${reward.dust}먼지를 획득했습니다!\n`;
+  description += `💰 ${reward.dust}닢을 획득했습니다!\n`;
   if (reward.item) {
     description += `📦 ${reward.item}을(를) 획득했습니다!\n`;
   }
   description += `✨ 경험치 +1\n`;
-  description += `\n보유 먼지: ${updatedUser.dust}먼지\n`;
+  description += `\n보유 닢: ${Math.max(0, updatedUser.dust || 0)}닢\n`;
   
   if (levelResult.leveledUp) {
     description += `\n🎉 레벨업! 레벨 ${levelResult.oldLevel} → ${levelResult.newLevel}`;
@@ -351,50 +326,27 @@ async function handleInventory(message) {
     .setTimestamp();
   
   const displayDust = Math.max(0, user.dust || 0);
-  let description = `보유 먼지: ${displayDust}먼지\n\n`;
+  let description = `보유 닢: ${displayDust}닢\n\n`;
   
-  // 장착한 무기 정보 표시
   if (weapon) {
-    const weaponNames = {
-      '검': '⚔️ 검',
-      '방패': '🛡️ 방패',
-      '지팡이': '🔮 지팡이'
-    };
+    const weaponNames = { '가시': '🌵 가시', '껍질': '🛡️ 껍질' };
     description += `**장착 무기**\n${weaponNames[weapon.weapon_type] || weapon.weapon_type} (+${weapon.enhancement}강)\n\n`;
   }
   
-  // 보유 무기 (인벤토리에서)
-  const weapons = inventory.filter(item => ['검', '방패', '지팡이'].includes(item.item_name));
-  if (weapons.length > 0) {
+  const weaponItems = inventory.filter(item => ['가시', '껍질'].includes(item.item_name));
+  if (weaponItems.length > 0) {
     description += '**보유 무기**\n';
-    weapons.forEach(item => {
-      const weaponEmojis = {
-        '검': '⚔️',
-        '방패': '🛡️',
-        '지팡이': '🔮'
-      };
-      description += `${weaponEmojis[item.item_name] || ''} **${item.item_name}** x${item.quantity}\n`;
+    weaponItems.forEach(item => {
+      const emojis = { '가시': '🌵', '껍질': '🛡️' };
+      description += `${emojis[item.item_name] || ''} **${item.item_name}** x${item.quantity}\n`;
     });
     description += '\n';
   }
   
-  // 스킬북 (인벤토리에서)
-  const skillbooks = inventory.filter(item => item.item_name === '스킬북');
-  if (skillbooks.length > 0) {
-    description += '**스킬북**\n';
-    skillbooks.forEach(item => {
-      description += `📚 **${item.item_name}** x${item.quantity}\n`;
-    });
-    description += '\n';
-  }
-  
-  // 아이템 목록 (무기와 스킬북 제외)
-  const regularItems = inventory.filter(item => 
-    !['검', '방패', '지팡이', '스킬북'].includes(item.item_name)
-  );
+  const regularItems = inventory.filter(item => !['가시', '껍질'].includes(item.item_name));
   
   description += '**보유 아이템**\n';
-  if (regularItems.length === 0 && weapons.length === 0 && skillbooks.length === 0) {
+  if (regularItems.length === 0 && weaponItems.length === 0) {
     description += '아이템이 없습니다.';
   } else if (regularItems.length === 0) {
     description += '일반 아이템이 없습니다.';
@@ -421,16 +373,12 @@ async function handleCharacter(message) {
   const user = db.getOrCreateUser(userId);
   const weapon = db.getWeapon(userId);
   
-  // 무기 보너스 계산
   let attackBonus = 0;
   let defenseBonus = 0;
-  let magicBonus = 0;
-  
   if (weapon) {
-    const bonus = weapon.enhancement * 2; // 강화당 +2
-    if (weapon.weapon_type === '검') attackBonus = bonus;
-    else if (weapon.weapon_type === '방패') defenseBonus = bonus;
-    else if (weapon.weapon_type === '지팡이') magicBonus = bonus;
+    const bonus = weapon.enhancement * 2;
+    if (weapon.weapon_type === '가시') attackBonus = bonus;
+    else if (weapon.weapon_type === '껍질') defenseBonus = bonus;
   }
   
   const embed = new EmbedBuilder()
@@ -438,11 +386,10 @@ async function handleCharacter(message) {
     .addFields(
       { name: '레벨', value: `${character.level}`, inline: true },
       { name: '경험치', value: `${character.exp}/${(character.level + 1) * 5}`, inline: true },
-      { name: '먼지', value: `${Math.max(0, user.dust || 0)}`, inline: true },
+      { name: '닢', value: `${Math.max(0, user.dust || 0)}`, inline: true },
       { name: '체력', value: `${character.current_hp}/${character.max_hp}`, inline: true },
       { name: '공격력', value: `${character.attack + attackBonus}${attackBonus > 0 ? ` (+${attackBonus})` : ''}`, inline: true },
-      { name: '방어력', value: `${character.defense + defenseBonus}${defenseBonus > 0 ? ` (+${defenseBonus})` : ''}`, inline: true },
-      { name: '마력', value: `${character.magic + magicBonus}${magicBonus > 0 ? ` (+${magicBonus})` : ''}`, inline: true }
+      { name: '방어력', value: `${character.defense + defenseBonus}${defenseBonus > 0 ? ` (+${defenseBonus})` : ''}`, inline: true }
     )
     .setColor(0x3498DB)
     .setTimestamp();
@@ -481,20 +428,10 @@ async function handleWeapon(message) {
   const weapon = db.getWeapon(userId);
   
   if (!weapon) {
-    return message.reply('장착한 무기가 없습니다. `!무기장착 [검/방패/지팡이]` 명령어로 무기를 장착하세요.');
+    return message.reply('장착한 무기가 없습니다. `!무기장착 [가시/껍질]` 명령어로 무기를 장착하세요.');
   }
-  
-  const weaponNames = {
-    '검': '⚔️ 검',
-    '방패': '🛡️ 방패',
-    '지팡이': '🔮 지팡이'
-  };
-  
-  const statNames = {
-    '검': '공격력',
-    '방패': '방어력',
-    '지팡이': '마력'
-  };
+  const weaponNames = { '가시': '🌵 가시', '껍질': '🛡️ 껍질' };
+  const statNames = { '가시': '공격력', '껍질': '방어력' };
   
   const bonus = weapon.enhancement * 2;
   
@@ -516,23 +453,17 @@ async function handleEquipWeapon(message, args) {
   const userId = message.author.id;
   
   if (args.length < 1) {
-    return message.reply('사용법: `!무기장착 [검/방패/지팡이]`');
+    return message.reply('사용법: `!무기장착 [가시/껍질]`');
   }
   
   const weaponType = args[0];
-  const validTypes = ['검', '방패', '지팡이'];
-  
+  const validTypes = ['가시', '껍질'];
   if (!validTypes.includes(weaponType)) {
-    return message.reply('올바른 무기 종류를 입력하세요: 검, 방패, 지팡이');
+    return message.reply('올바른 무기 종류를 입력하세요: 가시, 껍질');
   }
   
   db.equipWeapon(userId, weaponType);
-  
-  const weaponNames = {
-    '검': '⚔️ 검',
-    '방패': '🛡️ 방패',
-    '지팡이': '🔮 지팡이'
-  };
+  const weaponNames = { '가시': '🌵 가시', '껍질': '🛡️ 껍질' };
   
   const embed = new EmbedBuilder()
     .setTitle('무기 장착 완료!')
@@ -560,31 +491,26 @@ async function handleEnhanceWeapon(message) {
   const user = db.getOrCreateUser(userId);
   const inventory = db.getInventory(userId);
   
-  // 10강 또는 15강으로 갈 때 강화석 필요
-  const needsEnhancementStone = weapon.enhancement === 9 || weapon.enhancement === 14;
-  let enhancementStoneCount = 0;
-  
-  if (needsEnhancementStone) {
-    const enhancementStone = inventory.find(item => item.item_name === '강화석');
-    enhancementStoneCount = enhancementStone ? enhancementStone.quantity : 0;
-    
-    if (enhancementStoneCount < 1) {
-      return message.reply(`강화석이 필요합니다! (${weapon.enhancement + 1}강으로 가기 위해 필요)\n보유 강화석: ${enhancementStoneCount}개`);
+  const needsStone = weapon.enhancement === 9 || weapon.enhancement === 14;
+  let stoneCount = 0;
+  if (needsStone) {
+    const stone = inventory.find(item => item.item_name === '조약돌');
+    stoneCount = stone ? stone.quantity : 0;
+    if (stoneCount < 1) {
+      return message.reply(`조약돌이 필요합니다! (${weapon.enhancement + 1}강)\n보유 조약돌: ${stoneCount}개`);
     }
   }
   
-  if (user.dust < cost) {
-    return message.reply(`먼지가 부족합니다. 필요: ${cost}먼지, 보유: ${user.dust}먼지`);
+  const currentDust = Math.max(0, user.dust || 0);
+  if (currentDust < cost) {
+    return message.reply(`닢이 부족합니다. 필요: ${cost}닢, 보유: ${currentDust}닢`);
   }
   
-  // 비용 차감
   db.subtractDust(userId, cost);
-  const remainingDust = user.dust - cost;
+  const afterUser = db.getOrCreateUser(userId);
+  const remainingDust = Math.max(0, afterUser.dust || 0);
   
-  // 강화석 사용
-  if (needsEnhancementStone) {
-    db.removeItem(userId, '강화석', 1);
-  }
+  if (needsStone) db.removeItem(userId, '조약돌', 1);
   
   // 강화 확률 계산
   const chance = calculateEnhancementChance(weapon.enhancement);
@@ -598,11 +524,8 @@ async function handleEnhanceWeapon(message) {
     .setTitle('무기 강화 결과')
     .setTimestamp();
   
-  // 소모 재화 정보
-  let costInfo = `소모 먼지: ${cost}먼지\n남은 먼지: ${remainingDust}먼지`;
-  if (needsEnhancementStone) {
-    costInfo += `\n소모 강화석: 1개\n남은 강화석: ${enhancementStoneCount - 1}개`;
-  }
+  let costInfo = `소모 닢: ${cost}닢\n남은 닢: ${remainingDust}닢`;
+  if (needsStone) costInfo += `\n소모 조약돌: 1개\n남은 조약돌: ${stoneCount - 1}개`;
   
   if (destroyed) {
     db.enhanceWeapon(userId, false, true);
@@ -621,168 +544,6 @@ async function handleEnhanceWeapon(message) {
   message.reply({ embeds: [embed] });
 }
 
-// 스킬 정보 표시
-async function handleSkill(message) {
-  const userId = message.author.id;
-  const skill = db.getOrCreateSkill(userId);
-  
-  if (!skill.skill_name || !skill.skill_type) {
-    return message.reply('스킬이 없습니다. 상점에서 스킬북을 구매하여 스킬을 획득하세요.');
-  }
-  
-  const skillTypeEmojis = {
-    '불': '🔥',
-    '물': '💧',
-    '풀': '🌿',
-    '땅': '🌍',
-    '바람': '💨'
-  };
-  
-  const embed = new EmbedBuilder()
-    .setTitle('스킬 정보')
-    .addFields(
-      { name: '스킬명', value: skill.skill_name, inline: true },
-      { name: '타입', value: `${skillTypeEmojis[skill.skill_type] || ''} ${skill.skill_type}`, inline: true },
-      { name: '레벨', value: `${skill.skill_level}`, inline: true }
-    )
-    .setColor(0x9B59B6)
-    .setTimestamp();
-  
-  message.reply({ embeds: [embed] });
-}
-
-// 스킬 타입 선택
-async function handleSkillSelect(message, args) {
-  const userId = message.author.id;
-  const inventory = db.getInventory(userId);
-  
-  // 스킬북 확인
-  const skillbook = inventory.find(item => item.item_name === '스킬북');
-  if (!skillbook || skillbook.quantity < 1) {
-    return message.reply('스킬북이 없습니다. 상점에서 스킬북을 구매하세요.');
-  }
-  
-  if (args.length < 1) {
-    return message.reply('사용법: `!스킬선택 [불/물/풀/땅/바람]`\n예: `!스킬선택 불`');
-  }
-  
-  const skillType = args[0];
-  const validTypes = ['불', '물', '풀', '땅', '바람'];
-  
-  if (!validTypes.includes(skillType)) {
-    return message.reply('올바른 스킬 타입을 입력하세요: 불, 물, 풀, 땅, 바람');
-  }
-  
-  // 이미 스킬이 있으면 변경 불가
-  const currentSkill = db.getOrCreateSkill(userId);
-  if (currentSkill.skill_type) {
-    return message.reply('이미 스킬을 보유하고 있습니다. 스킬을 변경하려면 기존 스킬을 삭제해야 합니다.');
-  }
-  
-  // 스킬북 사용
-  db.removeItem(userId, '스킬북', 1);
-  
-  // 스킬 타입 설정 (이름은 나중에 설정)
-  db.setSkill(userId, skillType, null);
-  
-  const skillTypeEmojis = {
-    '불': '🔥',
-    '물': '💧',
-    '풀': '🌿',
-    '땅': '🌍',
-    '바람': '💨'
-  };
-  
-  const embed = new EmbedBuilder()
-    .setTitle('스킬 타입 선택 완료!')
-    .setDescription(`${skillTypeEmojis[skillType]} **${skillType}** 타입 스킬을 획득했습니다!\n\n` +
-      `이제 스킬 이름을 설정하세요: \`!스킬이름 [스킬 이름]\`\n` +
-      `예: \`!스킬이름 파이어볼\``)
-    .setColor(0x00FF00)
-    .setTimestamp();
-  
-  message.reply({ embeds: [embed] });
-}
-
-// 스킬 이름 설정
-async function handleSkillName(message, args) {
-  const userId = message.author.id;
-  const skill = db.getOrCreateSkill(userId);
-  
-  if (!skill.skill_type) {
-    return message.reply('먼저 스킬 타입을 선택하세요. 상점에서 스킬북을 구매하고 `!스킬선택 [타입]`을 사용하세요.');
-  }
-  
-  if (args.length < 1) {
-    return message.reply('사용법: `!스킬이름 [스킬 이름]`\n예: `!스킬이름 파이어볼`');
-  }
-  
-  const skillName = args.join(' ');
-  
-  if (skillName.length > 20) {
-    return message.reply('스킬 이름은 20자 이내로 입력해주세요.');
-  }
-  
-  // 스킬 이름 설정
-  db.setSkill(userId, skill.skill_type, skillName);
-  
-  const skillTypeEmojis = {
-    '불': '🔥',
-    '물': '💧',
-    '풀': '🌿',
-    '땅': '🌍',
-    '바람': '💨'
-  };
-  
-  const embed = new EmbedBuilder()
-    .setTitle('스킬 이름 설정 완료!')
-    .setDescription(`${skillTypeEmojis[skill.skill_type] || ''} **${skillName}** (${skill.skill_type} 타입) 스킬이 생성되었습니다!`)
-    .setColor(0x00FF00)
-    .setTimestamp();
-  
-  message.reply({ embeds: [embed] });
-}
-
-// 스킬 강화
-async function handleEnhanceSkill(message, args) {
-  const userId = message.author.id;
-  const skill = db.getOrCreateSkill(userId);
-  const inventory = db.getInventory(userId);
-  
-  // 강화석 아이템 확인
-  const enhancementStone = inventory.find(item => item.item_name === '강화석');
-  
-  if (!enhancementStone || enhancementStone.quantity < 1) {
-    return message.reply('스킬 강화에 필요한 강화석이 없습니다. 탐험을 통해 획득할 수 있습니다.');
-  }
-  
-  // 강화석 사용
-  if (!db.removeItem(userId, '강화석', 1)) {
-    return message.reply('강화석을 사용할 수 없습니다.');
-  }
-  
-  // 강화 확률 (무기보다 높음, 70~90%)
-  const baseChance = 0.8;
-  const chance = baseChance - (skill.skill_level * 0.02); // 레벨이 높을수록 낮아짐
-  const success = Math.random() < Math.max(chance, 0.5); // 최소 50%
-  
-  const embed = new EmbedBuilder()
-    .setTitle('스킬 강화 결과')
-    .setTimestamp();
-  
-  if (success) {
-    db.enhanceSkill(userId, true);
-    const newSkill = db.getOrCreateSkill(userId);
-    embed.setDescription(`✅ 강화 성공! 스킬 레벨 ${skill.skill_level} → ${newSkill.skill_level}`)
-      .setColor(0x00FF00);
-  } else {
-    embed.setDescription('❌ 강화 실패! 강화석은 소모되었지만 스킬은 안전합니다.')
-      .setColor(0xFFFF00);
-  }
-  
-  message.reply({ embeds: [embed] });
-}
-
 // 관리자 권한 체크
 function isAdmin(message) {
   if (!message.member) return false;
@@ -792,7 +553,7 @@ function isAdmin(message) {
 // 재화/아이템 전송
 async function handleSend(message, args) {
   if (args.length < 2) {
-    return message.reply('사용법: `!보내기 @유저 [재화양 또는 아이템명]`\n예: `!보내기 @유저 100` 또는 `!보내기 @유저 강화석`');
+    return message.reply('사용법: `!보내기 @유저 [재화양 또는 아이템명]`\n예: `!보내기 @유저 100` 또는 `!보내기 @유저 조약돌`');
   }
   
   // 멘션된 유저 찾기
@@ -828,16 +589,15 @@ async function handleSend(message, args) {
     }
     
     const sender = db.getOrCreateUser(senderId);
-    if (sender.dust < amount) {
-      return message.reply(`먼지가 부족합니다. 보유: ${sender.dust}먼지, 필요: ${amount}먼지`);
+    const senderDust = Math.max(0, sender.dust || 0);
+    if (senderDust < amount) {
+      return message.reply(`닢이 부족합니다. 보유: ${senderDust}닢, 필요: ${amount}닢`);
     }
-    
     db.subtractDust(senderId, amount);
     db.addDust(receiverId, amount);
-    
     const embed = new EmbedBuilder()
       .setTitle('전송 완료!')
-      .setDescription(`${targetUser.username}에게 ${amount}먼지를 전송했습니다.`)
+      .setDescription(`${targetUser.username}에게 ${amount}닢을 전송했습니다.`)
       .setColor(0x00FF00)
       .setTimestamp();
     
@@ -876,7 +636,7 @@ async function handleGive(message, args) {
   }
   
   if (args.length < 2) {
-    return message.reply('사용법: `!지급 @유저 [재화양 또는 아이템명]`\n예: `!지급 @유저 1000` 또는 `!지급 @유저 강화석`');
+    return message.reply('사용법: `!지급 @유저 [재화양 또는 아이템명]`\n예: `!지급 @유저 1000` 또는 `!지급 @유저 조약돌`');
   }
   
   // 멘션된 유저 찾기
@@ -911,7 +671,7 @@ async function handleGive(message, args) {
     
     const embed = new EmbedBuilder()
       .setTitle('지급 완료!')
-      .setDescription(`${targetUser.username}에게 ${amount}먼지를 지급했습니다.`)
+      .setDescription(`${targetUser.username}에게 ${amount}닢을 지급했습니다.`)
       .setColor(0x00FF00)
       .setTimestamp();
     
@@ -941,7 +701,7 @@ async function handleBattle(message, args) {
   
   // 체력이 0이면 배틀 불가
   if (attacker.current_hp <= 0) {
-    return message.reply('체력이 0입니다! 자정이 지나면 회복되거나 회복포션을 사용하세요.');
+    return message.reply('체력이 0입니다! 자정이 지나면 회복되거나 나무열매를 사용하세요.');
   }
   
   // 배틀 횟수 체크 (닉네임 지정이든 랜덤이든 하루 10회 한정)
@@ -977,38 +737,28 @@ async function handleBattle(message, args) {
   
   const defender = db.getOrCreateCharacter(defenderId);
   
-  // 무기 보너스 계산
   const attackerWeapon = db.getWeapon(userId);
   let attackerAttack = attacker.attack;
   let attackerDefense = attacker.defense;
-  let attackerMagic = attacker.magic;
-  
   if (attackerWeapon) {
     const bonus = attackerWeapon.enhancement * 2;
-    if (attackerWeapon.weapon_type === '검') attackerAttack += bonus;
-    else if (attackerWeapon.weapon_type === '방패') attackerDefense += bonus;
-    else if (attackerWeapon.weapon_type === '지팡이') attackerMagic += bonus;
+    if (attackerWeapon.weapon_type === '가시') attackerAttack += bonus;
+    else if (attackerWeapon.weapon_type === '껍질') attackerDefense += bonus;
   }
   
   const defenderWeapon = db.getWeapon(defenderId);
   let defenderAttack = defender.attack;
   let defenderDefense = defender.defense;
-  let defenderMagic = defender.magic;
-  
   if (defenderWeapon) {
     const bonus = defenderWeapon.enhancement * 2;
-    if (defenderWeapon.weapon_type === '검') defenderAttack += bonus;
-    else if (defenderWeapon.weapon_type === '방패') defenderDefense += bonus;
-    else if (defenderWeapon.weapon_type === '지팡이') defenderMagic += bonus;
+    if (defenderWeapon.weapon_type === '가시') defenderAttack += bonus;
+    else if (defenderWeapon.weapon_type === '껍질') defenderDefense += bonus;
   }
   
-  // 전투력 계산 (공격력 + 방어력 + 마력 + 레벨 보너스)
-  // 레벨 보너스: 레벨당 +5 전투력
   const attackerLevelBonus = attacker.level * 5;
   const defenderLevelBonus = defender.level * 5;
-  
-  const attackerPower = attackerAttack + attackerDefense + attackerMagic + attackerLevelBonus;
-  const defenderPower = defenderAttack + defenderDefense + defenderMagic + defenderLevelBonus;
+  const attackerPower = attackerAttack + attackerDefense + attackerLevelBonus;
+  const defenderPower = defenderAttack + defenderDefense + defenderLevelBonus;
   
   // 승부 결정 (약간의 랜덤 요소 추가)
   const attackerRoll = attackerPower + Math.floor(Math.random() * 20);
@@ -1020,20 +770,16 @@ async function handleBattle(message, args) {
     .setTitle('⚔️ 배틀 결과')
     .setTimestamp();
   
-  // 상대방 정보 표시
-  const defenderInfo = `**${defender.name}** (Lv.${defender.level})\n공격력: ${defenderAttack} | 방어력: ${defenderDefense} | 마력: ${defenderMagic}`;
+  const defenderInfo = `**${defender.name}** (Lv.${defender.level})\n공격력: ${defenderAttack} | 방어력: ${defenderDefense}`;
   
   if (attackerRoll > defenderRoll) {
-    // 공격자 승리
-    const reward = Math.floor(defenderPower / 10) + 50; // 상대 전투력의 10% + 기본 50
+    const reward = Math.floor(defenderPower / 10) + 50;
     db.addDust(userId, reward);
     db.addExp(userId, 1);
-    
-    const levelResult = db.addExp(userId, 0); // 레벨업 체크만
-    
+    const levelResult = db.addExp(userId, 0);
     let description = `**${attacker.name}**이(가) **${defender.name}**을(를) 이겼습니다! 🎉\n\n`;
     description += `📊 상대방 정보: ${defenderInfo}\n\n`;
-    description += `💰 ${reward}먼지를 획득했습니다!\n`;
+    description += `💰 ${reward}닢을 획득했습니다!\n`;
     description += `✨ 경험치 +1\n`;
     
     if (levelResult.leveledUp) {
@@ -1064,43 +810,31 @@ async function handleBattle(message, args) {
   message.reply({ embeds: [embed] });
 }
 
-// 상점 아이템 목록
+// 상점 아이템 목록 (작은 생물 컨셉: 닢=나뭇잎 화폐)
 const shopItems = {
-  // 무기
-  '검': { type: 'weapon', price: 100, emoji: '⚔️', description: '공격력을 올려주는 무기' },
-  '방패': { type: 'weapon', price: 100, emoji: '🛡️', description: '방어력을 올려주는 무기' },
-  '지팡이': { type: 'weapon', price: 100, emoji: '🔮', description: '마력을 올려주는 무기' },
-  // 아이템
-  '강화석': { type: 'item', price: 200, emoji: '💎', description: '스킬 강화에 사용되는 아이템' },
-  '회복포션': { type: 'item', price: 150, emoji: '🧪', description: '체력을 회복하는 포션' },
-  '마나포션': { type: 'item', price: 150, emoji: '🔵', description: '마나를 회복하는 포션 (던전 내 사용)' },
-  '랜덤 박스': { type: 'item', price: 300, emoji: '📦', description: '랜덤한 아이템을 얻을 수 있는 박스' },
-  '공략집': { type: 'item', price: 250, emoji: '⚡', description: '경험치 획득량을 증가시키는 아이템' },
-  '스킬북': { type: 'skillbook', price: 500, emoji: '📚', description: '스킬을 획득할 수 있는 책' }
+  '가시': { type: 'weapon', price: 100, emoji: '🌵', description: '공격력을 올려주는 무기' },
+  '껍질': { type: 'weapon', price: 100, emoji: '🛡️', description: '방어력을 올려주는 무기' },
+  '조약돌': { type: 'item', price: 200, emoji: '💎', description: '무기 강화에 사용' },
+  '나무열매': { type: 'item', price: 150, emoji: '🍒', description: '체력을 회복' },
+  '랜덤 박스': { type: 'item', price: 300, emoji: '📦', description: '랜덤 아이템' },
+  '모험기록': { type: 'item', price: 250, emoji: '📜', description: '경험치 획득량 증가' }
 };
 
 // 상점 표시
 async function handleShop(message) {
   const embed = new EmbedBuilder()
-    .setTitle('🏪 먼지 상점')
+    .setTitle('🏪 닢 상점')
     .setColor(0xFFD700)
     .setTimestamp();
-  
   let description = '**무기**\n';
-  description += '⚔️ **검** - 100먼지 (공격력 증가)\n';
-  description += '🛡️ **방패** - 100먼지 (방어력 증가)\n';
-  description += '🔮 **지팡이** - 100먼지 (마력 증가)\n\n';
-  
+  description += '🌵 **가시** - 100닢 (공격력)\n';
+  description += '🛡️ **껍질** - 100닢 (방어력)\n\n';
   description += '**아이템**\n';
-  description += '💎 **강화석** - 200먼지 (스킬 강화용)\n';
-  description += '🧪 **회복포션** - 150먼지 (체력 회복)\n';
-  description += '🔵 **마나포션** - 150먼지 (마나 회복, 던전 내 사용)\n';
-  description += '📦 **랜덤 박스** - 300먼지 (랜덤 아이템)\n';
-  description += '⚡ **공략집** - 250먼지 (경험치 증가)\n';
-  description += '📚 **스킬북** - 500먼지 (스킬 획득)\n\n';
-  
-  description += '구매하려면 `!구매 [아이템명]`을 입력하세요.';
-  
+  description += '💎 **조약돌** - 200닢 (무기 강화용)\n';
+  description += '🍒 **나무열매** - 150닢 (체력 회복)\n';
+  description += '📦 **랜덤 박스** - 300닢\n';
+  description += '📜 **모험기록** - 250닢 (경험치 증가)\n\n';
+  description += '구매: `!구매 [아이템명]`';
   embed.setDescription(description);
   message.reply({ embeds: [embed] });
 }
@@ -1141,33 +875,23 @@ async function handleBuy(message, args) {
   const currentDust = Math.max(0, user.dust || 0);
   
   if (currentDust < price) {
-    return message.reply(`먼지가 부족합니다. 필요: ${price}먼지, 보유: ${currentDust}먼지`);
+    return message.reply(`닢이 부족합니다. 필요: ${price}닢, 보유: ${currentDust}닢`);
   }
-  
   db.subtractDust(userId, price);
   const afterUser = db.getOrCreateUser(userId);
   const displayDust = Math.max(0, afterUser.dust || 0);
-  
   const embed = new EmbedBuilder()
     .setTitle('구매 완료!')
     .setColor(0x00FF00)
     .setTimestamp();
-  
   if (item.type === 'weapon') {
     db.equipWeapon(userId, itemName);
-    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매하고 장착했습니다!\n\n보유 먼지: ${displayDust}먼지`);
-    message.reply({ embeds: [embed] });
-  } else if (item.type === 'skillbook') {
-    db.addItem(userId, itemName, 'item', 1);
-    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매했습니다!\n\n` +
-      `스킬 타입을 선택하세요: \`!스킬선택 [불/물/풀/땅/바람]\`\n` +
-      `예: \`!스킬선택 불\`\n\n보유 먼지: ${displayDust}먼지`);
-    message.reply({ embeds: [embed] });
+    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매하고 장착했습니다!\n\n보유 닢: ${displayDust}닢`);
   } else {
     db.addItem(userId, itemName, 'item', 1);
-    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매했습니다!\n\n보유 먼지: ${displayDust}먼지`);
-    message.reply({ embeds: [embed] });
+    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매했습니다!\n\n보유 닢: ${displayDust}닢`);
   }
+  message.reply({ embeds: [embed] });
 }
 
 // 도움말 처리
@@ -1179,37 +903,37 @@ async function handleHelp(message) {
     .addFields(
       {
         name: '🎮 기본 명령어',
-        value: '`!출석` - 출석하고 먼지를 획득합니다\n`!탐험` - 탐험을 진행합니다 (하루 3회)\n`!가방` - 가방 내용을 확인합니다',
+        value: '`!출석` - 출석하고 닢을 획득\n`!탐험` - 탐험 (하루 3회)\n`!가방` - 가방 확인',
         inline: false
       },
       {
-        name: '👤 캐릭터 관련',
-        value: '`!캐릭터` - 캐릭터 정보 확인\n`!캐릭터 수정 [이름]` - 캐릭터 이름 변경',
+        name: '👤 캐릭터',
+        value: '`!캐릭터` - 정보 확인\n`!캐릭터 수정 [이름]` - 이름 변경',
         inline: false
       },
       {
-        name: '⚔️ 무기 시스템',
-        value: '`!무기` - 현재 장착한 무기 확인\n`!무기장착 [검/방패/지팡이]` - 무기 장착\n`!무기강화` - 무기 강화 (최대 +20강)',
+        name: '⚔️ 무기',
+        value: '`!무기` - 장착 무기 확인\n`!무기장착 [가시/껍질]` - 무기 장착\n`!무기강화` - 강화 (최대 +20강)',
         inline: false
       },
       {
-        name: '✨ 스킬 시스템',
-        value: '`!스킬` - 스킬 정보 확인\n`!스킬강화` - 스킬 강화 (강화석 필요)',
-        inline: false
-      },
-      {
-        name: '⚔️ 배틀 시스템',
-        value: '`!배틀` - 랜덤 상대와 배틀\n`!배틀 [상대방 닉네임]` - 지정 유저와 배틀 (하루 10회 공통)\n승리 시 먼지와 경험치 획득!',
+        name: '⚔️ 배틀',
+        value: '`!배틀` - 랜덤 상대\n`!배틀 [상대 닉네임]` - 지정 상대 (하루 10회)\n승리 시 닢·경험치 획득!',
         inline: false
       },
       {
         name: '🏪 상점',
-        value: '`!상점` - 상점 확인\n`!구매 [아이템명]` - 아이템 구매',
+        value: '`!상점` - 상점\n`!구매 [아이템명]` - 구매',
         inline: false
       },
       {
         name: '💊 회복',
-        value: '`!회복` - 회복포션 사용 (체력 50 회복)\n`!마나회복` - 마나포션 사용 (마나 30 회복, 던전 내에서만)',
+        value: '`!회복` - 나무열매 사용 (체력 50 회복)',
+        inline: false
+      },
+      {
+        name: '🕳️ 땅굴',
+        value: '`!땅굴` - 진입 또는 탐사 (체력 소모)\n`!땅굴탈출` - 땅굴에서 나가기',
         inline: false
       },
       {
@@ -1235,268 +959,181 @@ async function handleHelp(message) {
   }
 }
 
-// 회복포션 사용
+// 나무열매 사용 (체력 회복)
 async function handleHeal(message) {
   const userId = message.author.id;
-  // 자정 체력 회복 체크
   db.checkDailyHeal(userId);
   const character = db.getOrCreateCharacter(userId);
   const inventory = db.getInventory(userId);
-  
-  // 회복포션 확인
-  const potion = inventory.find(item => item.item_name === '회복포션');
-  
+  const potion = inventory.find(item => item.item_name === '나무열매');
   if (!potion || potion.quantity < 1) {
-    return message.reply('회복포션이 없습니다. 상점에서 구매할 수 있습니다.');
+    return message.reply('나무열매가 없습니다. 상점에서 구매할 수 있습니다.');
   }
-  
-  // 체력이 이미 최대인지 확인
   if (character.current_hp >= character.max_hp) {
     return message.reply('이미 체력이 최대입니다!');
   }
-  
-  // 회복포션 사용
-  db.removeItem(userId, '회복포션', 1);
+  db.removeItem(userId, '나무열매', 1);
   const hpBefore = character.current_hp;
-  const hpAfter = db.healHp(userId, 50); // 50 회복
-  
+  const hpAfter = db.healHp(userId, 50);
   const embed = new EmbedBuilder()
     .setTitle('회복 완료!')
-    .setDescription(`🧪 회복포션을 사용했습니다!\n\n체력: ${hpBefore} → ${hpAfter} / ${character.max_hp}`)
+    .setDescription(`🍒 나무열매를 먹었습니다!\n\n체력: ${hpBefore} → ${hpAfter} / ${character.max_hp}`)
     .setColor(0x00FF00)
     .setTimestamp();
-  
   message.reply({ embeds: [embed] });
 }
 
-// 마나포션 사용 (던전 내에서만)
-async function handleManaHeal(message) {
-  const userId = message.author.id;
-  const character = db.getOrCreateCharacter(userId);
-  const inventory = db.getInventory(userId);
-  const maxMana = character.max_mana || 50;
-
-  const potion = inventory.find(item => item.item_name === '마나포션');
-  if (!potion || potion.quantity < 1) {
-    return message.reply('마나포션이 없습니다. 상점에서 구매할 수 있습니다.');
-  }
-
-  if (!db.isInDungeon(userId)) {
-    return message.reply('마나포션은 던전 안에서만 사용할 수 있습니다.');
-  }
-
-  if ((character.mana || 0) >= maxMana) {
-    return message.reply('이미 마나가 최대입니다!');
-  }
-
-  db.removeItem(userId, '마나포션', 1);
-  const manaBefore = db.getDungeonMana(userId);
-  const manaAfter = db.healMana(userId, 30);
-
-  const embed = new EmbedBuilder()
-    .setTitle('마나 회복!')
-    .setDescription(`🔵 마나포션을 사용했습니다!\n\n마나: ${manaBefore} → ${manaAfter} / ${maxMana}`)
-    .setColor(0x0099FF)
-    .setTimestamp();
-
-  message.reply({ embeds: [embed] });
-}
-
-// 던전 진입
+// 땅굴 진입
 async function handleDungeon(message) {
   const userId = message.author.id;
   db.checkDailyHeal(userId);
   const character = db.getOrCreateCharacter(userId);
   
-  // 체력 체크
   if (character.current_hp <= 0) {
-    return message.reply('체력이 0입니다! 회복 후 던전에 진입하세요.');
+    return message.reply('체력이 0입니다! 회복 후 땅굴에 진입하세요.');
   }
   
   const result = db.enterDungeon(userId);
-  
-  if (!result.success) {
-    return message.reply(result.message);
-  }
+  if (!result.success) return message.reply(result.message);
   
   const embed = new EmbedBuilder()
-    .setTitle('🏰 던전 진입!')
-    .setDescription(`던전 ${result.floor}층에 진입했습니다!\n\n` +
-      `체력: ${character.current_hp}/${character.max_hp}\n` +
-      `마나: ${result.mana}/${character.max_mana || 50}\n\n` +
-      `\`!던전\`을 입력하여 탐사를 진행하세요.\n` +
-      `\`!던전탈출\`을 입력하여 던전에서 나갈 수 있습니다.`)
+    .setTitle('🕳️ 땅굴 진입!')
+    .setDescription(`땅굴 ${result.floor}층에 들어왔습니다!\n\n` +
+      `체력: ${character.current_hp}/${character.max_hp}\n\n` +
+      `\`!땅굴\`로 탐사를 진행하세요.\n` +
+      `\`!땅굴탈출\`로 나갈 수 있습니다.`)
     .setColor(0x8B4513)
     .setTimestamp();
-  
   message.reply({ embeds: [embed] });
 }
 
-// 던전 탐사
+// 땅굴 탐사 (체력 소모, 땅 속 생물 조우)
+const BURROW_HP_COST = 3; // 탐사 1회당 체력 3
+const BURROW_MONSTERS = ['뱀', '두더쥐', '땅강아지', '거미', '지렁이'];
+
 async function handleDungeonExplore(message) {
   const userId = message.author.id;
-  
   if (!db.isInDungeon(userId)) {
-    return message.reply('던전에 있지 않습니다. `!던전`을 입력하여 던전에 진입하세요.');
+    return message.reply('땅굴에 있지 않습니다. `!땅굴`로 진입하세요.');
   }
   
   const character = db.getOrCreateCharacter(userId);
-  
-  // 체력 체크
   if (character.current_hp <= 0) {
     db.resetDungeon(userId);
-    return message.reply('체력이 0이 되어 던전에서 강제로 나왔습니다. 1층부터 다시 시작해야 합니다.');
-  }
-  
-  // 마나 체크
-  const currentMana = db.getDungeonMana(userId);
-  if (currentMana < 5) {
-    return message.reply(`마나가 부족합니다! (보유: ${currentMana}/필요: 5)\n던전을 탈출하거나 회복 후 다시 시도하세요.`);
+    return message.reply('체력이 0이 되어 땅굴에서 나왔습니다. 1층부터 다시 시작하세요.');
   }
   
   const floor = db.getDungeonFloor(userId);
+  const hpBefore = character.current_hp;
+  const hpAfter = db.decreaseHp(userId, BURROW_HP_COST);
+  if (hpAfter <= 0) {
+    db.resetDungeon(userId);
+    return message.reply(`탐사 중 체력이 0이 되었습니다. 땅굴에서 나왔습니다. (1층부터 다시)`);
+  }
   
-  // 마나 소모
-  db.useDungeonMana(userId, 5);
-  
-  // 몬스터 만날 확률 (층이 높을수록 증가)
-  const monsterChance = 0.3 + (floor * 0.05); // 30% + 층당 5%
-  const hasMonster = Math.random() < Math.min(monsterChance, 0.8); // 최대 80%
+  const monsterChance = 0.3 + (floor * 0.05);
+  const hasMonster = Math.random() < Math.min(monsterChance, 0.8);
+  const monsterName = BURROW_MONSTERS[Math.floor(Math.random() * BURROW_MONSTERS.length)];
   
   const embed = new EmbedBuilder()
-    .setTitle(`🏰 던전 ${floor}층 탐사`)
+    .setTitle(`🕳️ 땅굴 ${floor}층 탐사`)
     .setTimestamp();
   
   if (hasMonster) {
-    // 몬스터 배틀
     const character = db.getOrCreateCharacter(userId);
     const weapon = db.getWeapon(userId);
-    
-    // 캐릭터 전투력 계산
     let attack = character.attack;
     let defense = character.defense;
-    
     if (weapon) {
       const bonus = weapon.enhancement * 2;
-      if (weapon.weapon_type === '검') attack += bonus;
-      else if (weapon.weapon_type === '방패') defense += bonus;
+      if (weapon.weapon_type === '가시') attack += bonus;
+      else if (weapon.weapon_type === '껍질') defense += bonus;
     }
-    
     const playerPower = attack + defense + (character.level * 5);
-    
-    // 몬스터 전투력 계산 (층이 높을수록 강함)
     const monsterBasePower = 50 + (floor * 20);
     const monsterPower = monsterBasePower + Math.floor(Math.random() * 30);
-    
-    // 배틀 결과
     const playerRoll = playerPower + Math.floor(Math.random() * 20);
     const monsterRoll = monsterPower + Math.floor(Math.random() * 20);
     
-    // Gemini API로 배틀 멘트 생성
     let battleComment = '';
     try {
       if (genAI) {
         const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const prompt = `판타지 RPG 게임에서 플레이어가 던전 ${floor}층에서 몬스터와 전투하는 장면을 80자 이내로 간단하고 재미있게 묘사해주세요. 한국어로 작성해주세요.`;
+        const prompt = `작은 동물(쥐, 도마뱀)이 땅굴 ${floor}층에서 ${monsterName}와 맞서는 장면을 80자 이내로 귀엽고 재미있게 묘사해주세요. 한국어로.`;
         const result = await model.generateContent(prompt);
         const response = await result.response;
         if (response && response.text) {
           const text = response.text().trim();
-          if (text) {
-            battleComment = text.length > 80 ? text.substring(0, 77) + '...' : text;
-          }
+          if (text) battleComment = text.length > 80 ? text.substring(0, 77) + '...' : text;
         }
-        if (!battleComment) battleComment = `${floor}층의 몬스터와 전투를 벌였습니다!`;
+        if (!battleComment) battleComment = `${floor}층에서 ${monsterName}와 맞섰습니다!`;
       } else {
-        battleComment = `${floor}층의 몬스터와 전투를 벌였습니다!`;
+        battleComment = `${floor}층에서 ${monsterName}와 맞섰습니다!`;
       }
     } catch (error) {
-      console.error('[던전 Gemini] 배틀 멘트 생성 오류:', error.message || error);
-      battleComment = `${floor}층의 몬스터와 전투를 벌였습니다!`;
+      const msg = (error && typeof error.message === 'string' ? error.message : '') || String(error);
+      const full = msg + String(error);
+      if (/429|quota|Too Many Requests/i.test(full)) console.warn('[Gemini] 할당량 초과 (땅굴).');
+      else console.error('[땅굴 Gemini]', msg);
+      battleComment = `${floor}층에서 ${monsterName}와 맞섰습니다!`;
     }
     
     if (playerRoll > monsterRoll) {
-      // 승리
       const reward = Math.floor(monsterPower / 5) + (floor * 10);
       db.addDust(userId, reward);
       db.addExp(userId, 1);
-      
-      // 다음 층으로 진행
       const newFloor = db.advanceDungeonFloor(userId);
-      
       embed.setDescription(`⚔️ ${battleComment}\n\n` +
-        `✅ 몬스터를 처치했습니다!\n\n` +
-        `💰 ${reward}먼지를 획득했습니다!\n` +
-        `✨ 경험치 +1\n` +
-        `📈 ${newFloor}층으로 진행했습니다!\n\n` +
-        `체력: ${character.current_hp}/${character.max_hp}\n` +
-        `마나: ${db.getDungeonMana(userId)}/${character.max_mana || 50}`)
+        `✅ ${monsterName}를(을) 물리쳤습니다!\n\n` +
+        `💰 ${reward}닢 획득!\n✨ 경험치 +1\n📈 ${newFloor}층으로!\n\n` +
+        `체력: ${db.getOrCreateCharacter(userId).current_hp}/${character.max_hp}`)
         .setColor(0x00FF00);
     } else {
-      // 패배 - 체력 감소
-      const hpBefore = character.current_hp;
-      const hpAfter = db.decreaseHp(userId, 10 + floor);
-      
+      const dmg = 10 + floor;
+      const hpAfterBattle = db.decreaseHp(userId, dmg);
       embed.setDescription(`⚔️ ${battleComment}\n\n` +
-        `❌ 몬스터에게 패배했습니다...\n\n` +
-        `💔 체력이 ${10 + floor} 감소했습니다! (${hpBefore} → ${hpAfter})\n\n` +
-        `체력: ${hpAfter}/${character.max_hp}\n` +
-        `마나: ${db.getDungeonMana(userId)}/${character.max_mana || 50}`)
+        `❌ ${monsterName}에게 당했습니다...\n\n` +
+        `💔 체력 ${dmg} 감소! (${character.current_hp} → ${hpAfterBattle})\n\n` +
+        `체력: ${hpAfterBattle}/${character.max_hp}`)
         .setColor(0xFF0000);
-      
-      if (hpAfter <= 0) {
+      if (hpAfterBattle <= 0) {
         db.resetDungeon(userId);
-        embed.setDescription(embed.data.description + `\n\n⚠️ 체력이 0이 되어 던전에서 강제로 나왔습니다. 1층부터 다시 시작해야 합니다.`);
+        embed.setDescription(embed.data.description + `\n\n⚠️ 체력 0! 땅굴에서 나왔습니다. 1층부터 다시.`);
       }
     }
   } else {
-    // 보상 획득
     const reward = 50 + (floor * 20) + Math.floor(Math.random() * 100);
     db.addDust(userId, reward);
-    
-    // 아이템 획득 확률
-    const itemChance = 0.2;
     let itemReward = '';
-    if (Math.random() < itemChance) {
-      const items = ['강화석', '회복포션', '마나포션', '랜덤 박스'];
+    if (Math.random() < 0.2) {
+      const items = ['조약돌', '나무열매', '랜덤 박스'];
       const randomItem = items[Math.floor(Math.random() * items.length)];
       db.addItem(userId, randomItem, 'item', 1);
-      itemReward = `\n📦 ${randomItem}을(를) 획득했습니다!`;
+      itemReward = `\n📦 ${randomItem} 획득!`;
     }
-    
-    // 다음 층으로 진행
     const newFloor = db.advanceDungeonFloor(userId);
-    
-    embed.setDescription(`🔍 던전을 탐사했습니다...\n\n` +
-      `💰 ${reward}먼지를 발견했습니다!${itemReward}\n` +
-      `📈 ${newFloor}층으로 진행했습니다!\n\n` +
-      `체력: ${character.current_hp}/${character.max_hp}\n` +
-      `마나: ${db.getDungeonMana(userId)}/${character.max_mana || 50}`)
+    const charNow = db.getOrCreateCharacter(userId);
+    embed.setDescription(`🔍 땅굴을 탐사했습니다...\n\n` +
+      `💰 ${reward}닢 발견!${itemReward}\n📈 ${newFloor}층으로!\n\n` +
+      `체력: ${charNow.current_hp}/${character.max_hp}`)
       .setColor(0x0099FF);
   }
-  
   message.reply({ embeds: [embed] });
 }
 
-// 던전 탈출
+// 땅굴 탈출
 async function handleDungeonExit(message) {
   const userId = message.author.id;
-  
   if (!db.isInDungeon(userId)) {
-    return message.reply('던전에 있지 않습니다.');
+    return message.reply('땅굴에 있지 않습니다.');
   }
-  
-  const result = db.exitDungeon(userId);
+  db.exitDungeon(userId);
   const floor = db.getDungeonFloor(userId);
-  
   const embed = new EmbedBuilder()
-    .setTitle('🚪 던전 탈출!')
-    .setDescription(`던전에서 나왔습니다.\n\n` +
-      `탐사한 최고 층: ${floor}층\n\n` +
-      `다시 던전에 진입하면 ${floor}층부터 시작할 수 있습니다.`)
+    .setTitle('🚪 땅굴 탈출!')
+    .setDescription(`땅굴에서 나왔습니다.\n\n탐사한 최고 층: ${floor}층\n다시 \`!땅굴\`로 진입하면 ${floor}층부터 시작합니다.`)
     .setColor(0x00FF00)
     .setTimestamp();
-  
   message.reply({ embeds: [embed] });
 }
 
