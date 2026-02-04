@@ -72,7 +72,7 @@ function calculateExplorationReward() {
   let item = null;
   
   if (itemRand < 5) {
-    const items = ['랜덤 박스', '강화석', '회복 포션', '마나 포션', '경험치 부스터'];
+    const items = ['랜덤 박스', '강화석', '회복포션', '마나포션', '공략집'];
     item = items[Math.floor(Math.random() * items.length)];
   }
   
@@ -940,7 +940,7 @@ async function handleBattle(message, args) {
   
   // 체력이 0이면 배틀 불가
   if (attacker.current_hp <= 0) {
-    return message.reply('체력이 0입니다! 자정이 지나면 회복되거나 회복 포션을 사용하세요.');
+    return message.reply('체력이 0입니다! 자정이 지나면 회복되거나 회복포션을 사용하세요.');
   }
   
   // 배틀 횟수 체크
@@ -1063,10 +1063,10 @@ const shopItems = {
   '지팡이': { type: 'weapon', price: 100, emoji: '🔮', description: '마력을 올려주는 무기' },
   // 아이템
   '강화석': { type: 'item', price: 200, emoji: '💎', description: '스킬 강화에 사용되는 아이템' },
-  '회복 포션': { type: 'item', price: 150, emoji: '🧪', description: '체력을 회복하는 포션' },
-  '마나 포션': { type: 'item', price: 150, emoji: '🔵', description: '마나를 회복하는 포션 (던전 내 사용)' },
+  '회복포션': { type: 'item', price: 150, emoji: '🧪', description: '체력을 회복하는 포션' },
+  '마나포션': { type: 'item', price: 150, emoji: '🔵', description: '마나를 회복하는 포션 (던전 내 사용)' },
   '랜덤 박스': { type: 'item', price: 300, emoji: '📦', description: '랜덤한 아이템을 얻을 수 있는 박스' },
-  '경험치 부스터': { type: 'item', price: 250, emoji: '⚡', description: '경험치 획득량을 증가시키는 아이템' },
+  '공략집': { type: 'item', price: 250, emoji: '⚡', description: '경험치 획득량을 증가시키는 아이템' },
   '스킬북': { type: 'skillbook', price: 500, emoji: '📚', description: '스킬을 획득할 수 있는 책' }
 };
 
@@ -1084,10 +1084,10 @@ async function handleShop(message) {
   
   description += '**아이템**\n';
   description += '💎 **강화석** - 200먼지 (스킬 강화용)\n';
-  description += '🧪 **회복 포션** - 150먼지 (체력 회복)\n';
-  description += '🔵 **마나 포션** - 150먼지 (마나 회복, 던전 내 사용)\n';
+  description += '🧪 **회복포션** - 150먼지 (체력 회복)\n';
+  description += '🔵 **마나포션** - 150먼지 (마나 회복, 던전 내 사용)\n';
   description += '📦 **랜덤 박스** - 300먼지 (랜덤 아이템)\n';
-  description += '⚡ **경험치 부스터** - 250먼지 (경험치 증가)\n';
+  description += '⚡ **공략집** - 250먼지 (경험치 증가)\n';
   description += '📚 **스킬북** - 500먼지 (스킬 획득)\n\n';
   
   description += '구매하려면 `!구매 [아이템명]`을 입력하세요.';
@@ -1200,7 +1200,7 @@ async function handleHelp(message) {
       },
       {
         name: '💊 회복',
-        value: '`!회복` - 회복 포션 사용 (체력 50 회복)\n`!마나회복` - 마나 포션 사용 (마나 30 회복, 던전 내에서만)',
+        value: '`!회복` - 회복포션 사용 (체력 50 회복)\n`!마나회복` - 마나포션 사용 (마나 30 회복, 던전 내에서만)',
         inline: false
       },
       {
@@ -1226,7 +1226,7 @@ async function handleHelp(message) {
   }
 }
 
-// 회복 포션 사용
+// 회복포션 사용
 async function handleHeal(message) {
   const userId = message.author.id;
   // 자정 체력 회복 체크
@@ -1234,11 +1234,11 @@ async function handleHeal(message) {
   const character = db.getOrCreateCharacter(userId);
   const inventory = db.getInventory(userId);
   
-  // 회복 포션 확인
-  const potion = inventory.find(item => item.item_name === '회복 포션');
+  // 회복포션 확인
+  const potion = inventory.find(item => item.item_name === '회복포션');
   
   if (!potion || potion.quantity < 1) {
-    return message.reply('회복 포션이 없습니다. 상점에서 구매할 수 있습니다.');
+    return message.reply('회복포션이 없습니다. 상점에서 구매할 수 있습니다.');
   }
   
   // 체력이 이미 최대인지 확인
@@ -1246,47 +1246,47 @@ async function handleHeal(message) {
     return message.reply('이미 체력이 최대입니다!');
   }
   
-  // 회복 포션 사용
-  db.removeItem(userId, '회복 포션', 1);
+  // 회복포션 사용
+  db.removeItem(userId, '회복포션', 1);
   const hpBefore = character.current_hp;
   const hpAfter = db.healHp(userId, 50); // 50 회복
   
   const embed = new EmbedBuilder()
     .setTitle('회복 완료!')
-    .setDescription(`🧪 회복 포션을 사용했습니다!\n\n체력: ${hpBefore} → ${hpAfter} / ${character.max_hp}`)
+    .setDescription(`🧪 회복포션을 사용했습니다!\n\n체력: ${hpBefore} → ${hpAfter} / ${character.max_hp}`)
     .setColor(0x00FF00)
     .setTimestamp();
   
   message.reply({ embeds: [embed] });
 }
 
-// 마나 포션 사용 (던전 내에서만)
+// 마나포션 사용 (던전 내에서만)
 async function handleManaHeal(message) {
   const userId = message.author.id;
   const character = db.getOrCreateCharacter(userId);
   const inventory = db.getInventory(userId);
   const maxMana = character.max_mana || 50;
 
-  const potion = inventory.find(item => item.item_name === '마나 포션');
+  const potion = inventory.find(item => item.item_name === '마나포션');
   if (!potion || potion.quantity < 1) {
-    return message.reply('마나 포션이 없습니다. 상점에서 구매할 수 있습니다.');
+    return message.reply('마나포션이 없습니다. 상점에서 구매할 수 있습니다.');
   }
 
   if (!db.isInDungeon(userId)) {
-    return message.reply('마나 포션은 던전 안에서만 사용할 수 있습니다.');
+    return message.reply('마나포션은 던전 안에서만 사용할 수 있습니다.');
   }
 
   if ((character.mana || 0) >= maxMana) {
     return message.reply('이미 마나가 최대입니다!');
   }
 
-  db.removeItem(userId, '마나 포션', 1);
+  db.removeItem(userId, '마나포션', 1);
   const manaBefore = db.getDungeonMana(userId);
   const manaAfter = db.healMana(userId, 30);
 
   const embed = new EmbedBuilder()
     .setTitle('마나 회복!')
-    .setDescription(`🔵 마나 포션을 사용했습니다!\n\n마나: ${manaBefore} → ${manaAfter} / ${maxMana}`)
+    .setDescription(`🔵 마나포션을 사용했습니다!\n\n마나: ${manaBefore} → ${manaAfter} / ${maxMana}`)
     .setColor(0x0099FF)
     .setTimestamp();
 
@@ -1445,7 +1445,7 @@ async function handleDungeonExplore(message) {
     const itemChance = 0.2;
     let itemReward = '';
     if (Math.random() < itemChance) {
-      const items = ['강화석', '회복 포션', '마나 포션', '랜덤 박스'];
+      const items = ['강화석', '회복포션', '마나포션', '랜덤 박스'];
       const randomItem = items[Math.floor(Math.random() * items.length)];
       db.addItem(userId, randomItem, 'item', 1);
       itemReward = `\n📦 ${randomItem}을(를) 획득했습니다!`;

@@ -2,7 +2,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_FILE = path.join(__dirname, 'data.json');
+// Railway Volume 사용 시: Variables에 DATA_DIR=/data 설정 (Volume 마운트 경로와 맞출 것)
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const DATA_FILE = path.join(DATA_DIR, 'data.json');
+if (process.env.DATA_DIR) {
+  console.log('[DB] 데이터 저장 경로(Volume):', DATA_FILE);
+}
 
 // 데이터 로드
 function loadData() {
@@ -26,6 +31,9 @@ function loadData() {
 // 데이터 저장
 function saveData() {
   try {
+    if (DATA_DIR !== __dirname && !fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     const data = {
       users,
       characters,
