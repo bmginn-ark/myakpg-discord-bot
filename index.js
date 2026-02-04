@@ -15,9 +15,12 @@ if (!config.token) {
   process.exit(1);
 }
 
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('./database');
+
+// 땅굴 진행용 스레드 (userId -> { threadId, channelId })
+const dungeonThreads = new Map();
 
 // Gemini API 초기화
 let genAI = null;
@@ -356,7 +359,7 @@ async function handleExploration(message) {
   message.reply({ embeds: [embed] });
 }
 
-// 가방 처리 (DM으로 전송)
+// 가방 처리 (채널에 출력)
 async function handleInventory(message) {
   const userId = message.author.id;
   const inventory = db.getInventory(userId);
@@ -400,13 +403,7 @@ async function handleInventory(message) {
   }
   
   embed.setDescription(description);
-  
-  try {
-    await message.author.send({ embeds: [embed] });
-    message.reply('가방 내용을 DM으로 전송했습니다.');
-  } catch (error) {
-    message.reply('DM을 보낼 수 없습니다. DM 설정을 확인해주세요.');
-  }
+  await message.reply({ embeds: [embed] });
 }
 
 // 캐릭터 정보 표시
@@ -1090,14 +1087,7 @@ async function handleHelp(message) {
     )
     .setFooter({ text: '더 자세한 정보는 각 명령어를 입력해보세요!' });
   
-  try {
-    await message.author.send({ embeds: [embed] });
-    // DM 전송 성공 시 채널에 간단한 확인 메시지만
-    await message.react('✅').catch(() => {});
-  } catch (error) {
-    // DM 전송 실패 시 채널에 직접 표시
-    await message.reply({ embeds: [embed] });
-  }
+  await message.reply({ embeds: [embed] });
 }
 
 // 나무열매 사용 (체력 회복)
@@ -1124,6 +1114,34 @@ async function handleHeal(message) {
   message.reply({ embeds: [embed] });
 }
 
+// 땅굴 스레드 가져오기 또는 생성
+async function getOrCreateDungeonThread(message, userId) {
+  const existing = dungeonThreads.get(userId);
+  if (existing) {
+    try {
+      const thread = await message.client.channels.fetch(existing.threadId);
+      return thread;
+    } catch (e) {
+      dungeonThreads.delete(userId);
+    }
+  }
+  const channel = message.channel;
+  if (!channel.threads || typeof channel.threads.create !== 'function') {
+    return null;
+  }
+  const character = db.getOrCreateCharacter(userId);
+  const threadName = `🕳️ 땅굴 - ${character.name}`.slice(0, 100);
+  const thread = await channel.threads.create({
+    name: threadName,
+    type: ChannelType.PublicThread,
+    reason: '땅굴 탐사'
+  }).catch(() => null);
+  if (thread) {
+    dungeonThreads.set(userId, { threadId: thread.id, channelId: channel.id });
+  }
+  return thread;
+}
+
 // 땅굴 진입
 async function handleDungeon(message) {
   const userId = message.author.id;
@@ -1145,7 +1163,14 @@ async function handleDungeon(message) {
       `\`!땅굴탈출\`로 나갈 수 있습니다.`)
     .setColor(0x8B4513)
     .setTimestamp();
-  message.reply({ embeds: [embed] });
+  
+  const thread = await getOrCreateDungeonThread(message, userId);
+  if (thread) {
+    await thread.send({ embeds: [embed] });
+    await message.reply('땅굴 스레드가 생성되었습니다. **스레드**에서 `!땅굴`로 탐사하세요.');
+  } else {
+    await message.reply({ embeds: [embed] });
+  }
 }
 
 // 땅굴 탐사 (체력 소모, 땅 속 생물 조우)
@@ -1219,18 +1244,25 @@ async function handleDungeonExplore(message) {
       battleComment = `${floor}층에서 ${monsterName}와 맞섰습니다!`;
     }
     
-    if (playerRoll > monsterRoll) {
+    // 공격력이 충분하면 몬스터를 처치 (요구 공격력: 20 + 층×4)
+    const requiredAttackToKill = 20 + floor * 4;
+    const killByAttack = attack >= requiredAttackToKill;
+
+    if (killByAttack || playerRoll > monsterRoll) {
       const reward = Math.floor(monsterPower / 5) + (floor * 10);
       db.addDust(userId, reward);
       db.addExp(userId, 1);
       const newFloor = db.advanceDungeonFloor(userId);
+      const winReason = killByAttack
+        ? `✅ 공격력으로 ${monsterName}를(을) 처치했습니다!`
+        : `✅ ${monsterName}를(을) 물리쳤습니다!`;
       embed.setDescription(`⚔️ ${battleComment}\n\n` +
-        `✅ ${monsterName}를(을) 물리쳤습니다!\n\n` +
+        `${winReason}\n\n` +
         `💰 ${reward}닢 획득!\n✨ 경험치 +1\n📈 ${newFloor}층으로!\n\n` +
         `체력: ${db.getOrCreateCharacter(userId).current_hp}/${character.max_hp}`)
         .setColor(0x00FF00);
     } else {
-      const dmg = 10 + floor;
+      const dmg = 10;
       const hpAfterBattle = db.decreaseHp(userId, dmg);
       embed.setDescription(`⚔️ ${battleComment}\n\n` +
         `❌ ${monsterName}에게 당했습니다...\n\n` +
@@ -1265,7 +1297,13 @@ async function handleDungeonExplore(message) {
       `체력: ${charNow.current_hp}/${character.max_hp}`)
       .setColor(0x0099FF);
   }
-  message.reply({ embeds: [embed] });
+  
+  const thread = await getOrCreateDungeonThread(message, userId);
+  if (thread) {
+    await thread.send({ embeds: [embed] });
+  } else {
+    await message.reply({ embeds: [embed] });
+  }
 }
 
 // 땅굴 탈출
@@ -1274,14 +1312,27 @@ async function handleDungeonExit(message) {
   if (!db.isInDungeon(userId)) {
     return message.reply('땅굴에 있지 않습니다.');
   }
-  db.exitDungeon(userId);
   const floor = db.getDungeonFloor(userId);
+  db.exitDungeon(userId);
+  
   const embed = new EmbedBuilder()
     .setTitle('🚪 땅굴 탈출!')
     .setDescription(`땅굴에서 나왔습니다.\n\n탐사한 최고 층: ${floor}층\n다시 \`!땅굴\`로 진입하면 ${floor}층부터 시작합니다.`)
     .setColor(0x00FF00)
     .setTimestamp();
-  message.reply({ embeds: [embed] });
+  
+  const info = dungeonThreads.get(userId);
+  dungeonThreads.delete(userId);
+  if (info) {
+    try {
+      const thread = await message.client.channels.fetch(info.threadId);
+      await thread.send({ embeds: [embed] });
+    } catch (e) {
+      await message.reply({ embeds: [embed] });
+    }
+  } else {
+    await message.reply({ embeds: [embed] });
+  }
 }
 
 client.login(config.token);
