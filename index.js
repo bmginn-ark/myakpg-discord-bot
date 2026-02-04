@@ -1336,12 +1336,17 @@ async function handleDungeonExplore(message) {
       db.addDust(userId, reward);
       db.addExp(userId, 1);
       const newFloor = db.advanceDungeonFloor(userId);
+      let expLine = '✨ 경험치 +1';
+      if (newFloor % 5 === 0) {
+        db.addExp(userId, newFloor);
+        expLine += `\n🎉 ${newFloor}층 도달 보너스! 경험치 +${newFloor}`;
+      }
       const winReason = killByAttack
         ? `✅ 공격력으로 ${monsterName}를(을) 처치했습니다!`
         : `✅ ${monsterName}를(을) 물리쳤습니다!`;
       embed.setDescription(`⚔️ ${battleComment}\n\n` +
         `${winReason}\n\n` +
-        `💰 ${reward}닢 획득!\n✨ 경험치 +1\n📈 ${newFloor}층으로!\n\n` +
+        `💰 ${reward}닢 획득!\n${expLine}\n📈 ${newFloor}층으로!\n\n` +
         `체력: ${db.getOrCreateCharacter(userId).current_hp}/${character.max_hp}`)
         .setColor(0x00FF00);
     } else {
@@ -1374,9 +1379,14 @@ async function handleDungeonExplore(message) {
       itemReward += `\n${jinfo ? jinfo.emoji : '🪙'} ${j} 발견!`;
     }
     const newFloor = db.advanceDungeonFloor(userId);
+    let expLine = `📈 ${newFloor}층으로!`;
+    if (newFloor % 5 === 0) {
+      db.addExp(userId, newFloor);
+      expLine = `🎉 ${newFloor}층 도달 보너스! 경험치 +${newFloor}\n📈 ${newFloor}층으로!`;
+    }
     const charNow = db.getOrCreateCharacter(userId);
     embed.setDescription(`🔍 땅굴을 탐사했습니다...\n\n` +
-      `💰 ${reward}닢 발견!${itemReward}\n📈 ${newFloor}층으로!\n\n` +
+      `💰 ${reward}닢 발견!${itemReward}\n${expLine}\n\n` +
       `체력: ${charNow.current_hp}/${character.max_hp}`)
       .setColor(0x0099FF);
   }
