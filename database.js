@@ -91,7 +91,25 @@ function getOrCreateUser(id) {
   if (users[id].dust != null && users[id].dust < 0) {
     users[id].dust = 0;
   }
+  if (!users[id].last_item_use || typeof users[id].last_item_use !== 'object') {
+    users[id].last_item_use = {};
+  }
   return users[id];
+}
+
+/** 아이템 오늘 사용 가능 여부 (일일 1회 제한 아이템용) */
+function canUseItemToday(id, itemName) {
+  const user = getOrCreateUser(id);
+  const today = new Date().toISOString().split('T')[0];
+  const last = user.last_item_use[itemName];
+  return last !== today;
+}
+
+/** 아이템 사용일 기록 (일일 1회 제한 아이템 사용 시 호출) */
+function setLastItemUse(id, itemName, date) {
+  const user = getOrCreateUser(id);
+  user.last_item_use[itemName] = date;
+  saveData();
 }
 
 function getOrCreateCharacter(id) {
@@ -412,5 +430,6 @@ module.exports = {
   addExp, updateCharacterName, resetBattleCount, incrementBattle, getBattleCount,
   findUserByName, getRandomCharacterId, decreaseHp, healHp, fullHeal, checkDailyHeal,
   enterDungeon, exitDungeon, resetDungeon,
-  advanceDungeonFloor, getDungeonFloor, isInDungeon
+  advanceDungeonFloor, getDungeonFloor, isInDungeon,
+  canUseItemToday, setLastItemUse
 };

@@ -98,7 +98,7 @@ function calculateExplorationReward() {
   const itemRand = Math.random() * 100;
   let item = null;
   if (itemRand < 5) {
-    const items = ['랜덤 박스', '조약돌', '나무열매', '모험기록'];
+    const items = ['랜덤박스', '조약돌', '나무열매', '모험기록'];
     item = items[Math.floor(Math.random() * items.length)];
   }
   const junk = rollJunkForExploration();
@@ -247,6 +247,9 @@ client.on('messageCreate', async (message) => {
         break;
       case '!박스열기':
         await handleOpenRandomBox(message);
+        break;
+      case '!사용':
+        await handleUseItem(message, args);
         break;
       case '!도움말':
         await handleHelp(message);
@@ -953,15 +956,15 @@ async function handleSell(message, args) {
   message.reply({ embeds: [embed] });
 }
 
-// 랜덤 박스 열기 (잡동사니 포함 풀)
+// 랜덤박스 열기 (잡동사니 포함 풀)
 const RANDOM_BOX_POOL = ['조약돌', '나무열매', '모험기록', '동전', '작은열매', '도토리', '들꽃', '나비날개', '깃털'];
 
 async function handleOpenRandomBox(message) {
   const userId = message.author.id;
   const inventory = db.getInventory(userId);
-  const toUse = inventory.find(i => i.item_name === '랜덤 박스' || i.item_name === '랜덤박스');
+  const toUse = inventory.find(i => i.item_name === '랜덤박스');
   if (!toUse || toUse.quantity < 1) {
-    return message.reply('랜덤 박스가 없습니다. 상점·탐험·땅굴에서 얻을 수 있습니다.');
+    return message.reply('랜덤박스가 없습니다. 상점·탐험·땅굴에서 얻을 수 있습니다.');
   }
   db.removeItem(userId, toUse.item_name, 1);
   const itemName = RANDOM_BOX_POOL[Math.floor(Math.random() * RANDOM_BOX_POOL.length)];
@@ -969,9 +972,70 @@ async function handleOpenRandomBox(message) {
   const junk = junkItems.find(j => j.name === itemName);
   const emoji = junk ? junk.emoji : (shopItems[itemName] ? shopItems[itemName].emoji : '📦');
   const embed = new EmbedBuilder()
-    .setTitle('📦 랜덤 박스 열기')
+    .setTitle('📦 랜덤박스 열기')
     .setDescription(`${emoji} **${itemName}**을(를) 얻었습니다!`)
     .setColor(0x9B59B6)
+    .setTimestamp();
+  message.reply({ embeds: [embed] });
+}
+
+// 아이템 사용 (!사용 [아이템이름]) - 경험치/능력치 등 확장 가능
+const USABLE_ITEMS = {
+  '모험기록': {
+    dailyLimit: true,
+    effect: (message, userId) => {
+      if (!db.canUseItemToday(userId, '모험기록')) {
+        return { ok: false, message: '모험기록은 하루에 1회만 사용할 수 있습니다.' };
+      }
+      const today = new Date().toISOString().split('T')[0];
+      db.setLastItemUse(userId, '모험기록', today);
+      db.removeItem(userId, '모험기록', 1);
+      const levelResult = db.addExp(userId, 3);
+      const char = db.getOrCreateCharacter(userId);
+      let desc = `📜 **모험기록**을 읽었습니다!\n\n✨ 경험치 +3\n현재: ${char.exp}/${(char.level + 1) * 5} EXP`;
+      if (levelResult.leveledUp) {
+        desc += `\n\n🎉 **레벨 업!** Lv.${levelResult.oldLevel} → Lv.${levelResult.newLevel}`;
+      }
+      return { ok: true, description: desc, color: 0xF1C40F };
+    }
+  },
+  '랜덤박스': {
+    effect: (message, userId, opts = {}) => {
+      const actualName = opts.actualItemName || '랜덤박스';
+      db.removeItem(userId, actualName, 1);
+      const itemName = RANDOM_BOX_POOL[Math.floor(Math.random() * RANDOM_BOX_POOL.length)];
+      db.addItem(userId, itemName, 'item', 1);
+      const junk = junkItems.find(j => j.name === itemName);
+      const emoji = junk ? junk.emoji : (shopItems[itemName] ? shopItems[itemName].emoji : '📦');
+      return { ok: true, description: `${emoji} **${itemName}**을(를) 얻었습니다!`, color: 0x9B59B6 };
+    }
+  }
+};
+
+async function handleUseItem(message, args) {
+  const itemName = args.join(' ').trim();
+  if (!itemName) {
+    return message.reply('사용할 아이템 이름을 입력하세요. (예: `!사용 모험기록`)');
+  }
+  const userId = message.author.id;
+  const inventory = db.getInventory(userId);
+  const entry = inventory.find(i => i.item_name === itemName || (itemName === '랜덤박스' && i.item_name === '랜덤 박스'));
+  if (!entry || entry.quantity < 1) {
+    return message.reply(`**${itemName}**을(를) 보유하고 있지 않습니다.`);
+  }
+  const handlerKey = (itemName === '랜덤 박스' ? '랜덤박스' : itemName);
+  const handler = USABLE_ITEMS[handlerKey];
+  if (!handler || !handler.effect) {
+    return message.reply('사용할 수 없는 아이템입니다.');
+  }
+  const result = handler.effect(message, userId, { actualItemName: entry.item_name });
+  if (!result.ok) {
+    return message.reply(result.message);
+  }
+  const embed = new EmbedBuilder()
+    .setTitle('아이템 사용')
+    .setDescription(result.description)
+    .setColor(result.color ?? 0x3498DB)
     .setTimestamp();
   message.reply({ embeds: [embed] });
 }
@@ -1059,8 +1123,8 @@ async function handleHelp(message) {
         inline: false
       },
       {
-        name: '🏪 상점',
-        value: '`!상점` - 상점\n`!구매 [아이템명]` - 구매\n`!판매 [아이템명] (수량)` - 되팔기/잡동사니 교환\n`!박스열기` - 랜덤 박스 사용',
+        name: '🏪 상점 / 아이템',
+        value: '`!상점` - 상점\n`!구매 [아이템명]` - 구매\n`!판매 [아이템명] (수량)` - 되팔기/잡동사니 교환\n`!박스열기` / `!사용 랜덤박스` - 랜덤박스 열기\n`!사용 [아이템이름]` - 아이템 사용 (예: 모험기록, 랜덤박스)',
         inline: false
       },
       {
@@ -1278,7 +1342,7 @@ async function handleDungeonExplore(message) {
     db.addDust(userId, reward);
     let itemReward = '';
     if (Math.random() < 0.2) {
-      const items = ['조약돌', '나무열매', '랜덤 박스'];
+      const items = ['조약돌', '나무열매', '랜덤박스'];
       const randomItem = items[Math.floor(Math.random() * items.length)];
       db.addItem(userId, randomItem, 'item', 1);
       itemReward = `\n📦 ${randomItem} 획득!`;
