@@ -94,7 +94,7 @@ async function generateExplorationComment() {
   }
   
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = '판타지 RPG 게임의 탐험 결과를 80자 이내로 간단하고 재미있게 묘사해주세요. 한국어로 작성해주세요.';
     
     const result = await model.generateContent(prompt);
@@ -1391,7 +1391,7 @@ async function handleDungeonExplore(message) {
     let battleComment = '';
     try {
       if (genAI) {
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
         const prompt = `판타지 RPG 게임에서 플레이어가 던전 ${floor}층에서 몬스터와 전투하는 장면을 80자 이내로 간단하고 재미있게 묘사해주세요. 한국어로 작성해주세요.`;
         const result = await model.generateContent(prompt);
         const response = await result.response;
