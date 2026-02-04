@@ -255,14 +255,13 @@ client.on('messageCreate', async (message) => {
         await handleHeal(message);
         break;
       case '!땅굴':
-        if (db.isInDungeon(message.author.id)) {
+        if (args[0] === '탈출') {
+          await handleDungeonExit(message);
+        } else if (db.isInDungeon(message.author.id)) {
           await handleDungeonExplore(message);
         } else {
           await handleDungeon(message);
         }
-        break;
-      case '!땅굴탈출':
-        await handleDungeonExit(message);
         break;
     }
   } catch (error) {
@@ -1071,7 +1070,7 @@ async function handleHelp(message) {
       },
       {
         name: '🕳️ 땅굴',
-        value: '`!땅굴` - 진입 또는 탐사 (체력 소모)\n`!땅굴탈출` - 땅굴에서 나가기',
+        value: '`!땅굴` - 진입 또는 탐사 (체력 소모)\n`!땅굴 탈출` - 땅굴에서 나가기',
         inline: false
       },
       {
@@ -1160,7 +1159,7 @@ async function handleDungeon(message) {
     .setDescription(`땅굴 ${result.floor}층에 들어왔습니다!\n\n` +
       `체력: ${character.current_hp}/${character.max_hp}\n\n` +
       `\`!땅굴\`로 탐사를 진행하세요.\n` +
-      `\`!땅굴탈출\`로 나갈 수 있습니다.`)
+      `\`!땅굴 탈출\`로 나갈 수 있습니다.`)
     .setColor(0x8B4513)
     .setTimestamp();
   
