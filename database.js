@@ -316,6 +316,13 @@ function findUserByName(name) {
   return null;
 }
 
+// 배틀용 랜덤 상대 캐릭터 ID (자기 자신 제외)
+function getRandomCharacterId(excludeId) {
+  const ids = Object.keys(characters).filter(id => id !== excludeId);
+  if (ids.length === 0) return null;
+  return ids[Math.floor(Math.random() * ids.length)];
+}
+
 // 체력 감소
 function decreaseHp(id, amount) {
   const char = getOrCreateCharacter(id);
@@ -450,7 +457,7 @@ module.exports = {
   resetExplorationCount, incrementExploration, addItem, removeItem, getInventory,
   getWeapon, equipWeapon, enhanceWeapon, getOrCreateSkill, setSkill, enhanceSkill,
   addExp, updateCharacterName, resetBattleCount, incrementBattle, getBattleCount,
-  findUserByName, decreaseHp, healHp, fullHeal, healMana, checkDailyHeal,
+  findUserByName, getRandomCharacterId, decreaseHp, healHp, fullHeal, healMana, checkDailyHeal,
   enterDungeon, exitDungeon, resetDungeon, useDungeonMana, getDungeonMana,
   advanceDungeonFloor, getDungeonFloor, isInDungeon
 };

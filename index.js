@@ -928,10 +928,6 @@ async function handleGive(message, args) {
 
 // 배틀 처리
 async function handleBattle(message, args) {
-  if (args.length < 1) {
-    return message.reply('사용법: `!배틀 [상대방 닉네임]`');
-  }
-  
   const userId = message.author.id;
   // 자정 체력 회복 체크
   db.checkDailyHeal(userId);
@@ -943,27 +939,35 @@ async function handleBattle(message, args) {
     return message.reply('체력이 0입니다! 자정이 지나면 회복되거나 회복포션을 사용하세요.');
   }
   
-  // 배틀 횟수 체크
+  // 배틀 횟수 체크 (닉네임 지정이든 랜덤이든 하루 10회 한정)
   const battleCount = db.getBattleCount(userId);
   if (battleCount >= 10) {
     return message.reply('오늘의 배틀 횟수를 모두 사용했습니다! (하루 10회)');
   }
   
-  // 자기 자신과 배틀 불가
-  if (attacker.name === args.join(' ')) {
-    return message.reply('자기 자신과는 배틀할 수 없습니다.');
-  }
+  let defenderId;
+  let defenderName;
   
-  // 상대방 찾기
-  const defenderName = args.join(' ');
-  const defenderId = db.findUserByName(defenderName);
-  
-  if (!defenderId) {
-    return message.reply(`"${defenderName}"라는 이름의 캐릭터를 찾을 수 없습니다.`);
-  }
-  
-  if (defenderId === userId) {
-    return message.reply('자기 자신과는 배틀할 수 없습니다.');
+  if (args.length >= 1) {
+    // 상대방 닉네임으로 찾기
+    defenderName = args.join(' ');
+    if (attacker.name === defenderName) {
+      return message.reply('자기 자신과는 배틀할 수 없습니다.');
+    }
+    defenderId = db.findUserByName(defenderName);
+    if (!defenderId) {
+      return message.reply(`"${defenderName}"라는 이름의 캐릭터를 찾을 수 없습니다.`);
+    }
+    if (defenderId === userId) {
+      return message.reply('자기 자신과는 배틀할 수 없습니다.');
+    }
+  } else {
+    // 랜덤 상대 매칭
+    defenderId = db.getRandomCharacterId(userId);
+    if (!defenderId) {
+      return message.reply('배틀할 상대가 없습니다. (다른 유저가 먼저 `!캐릭터`로 캐릭터를 생성해 주세요.)');
+    }
+    defenderName = db.getOrCreateCharacter(defenderId).name;
   }
   
   const defender = db.getOrCreateCharacter(defenderId);
@@ -1190,7 +1194,7 @@ async function handleHelp(message) {
       },
       {
         name: '⚔️ 배틀 시스템',
-        value: '`!배틀 [상대방 닉네임]` - 다른 유저와 배틀 (하루 10회)\n승리 시 먼지와 경험치 획득!',
+        value: '`!배틀` - 랜덤 상대와 배틀\n`!배틀 [상대방 닉네임]` - 지정 유저와 배틀 (하루 10회 공통)\n승리 시 먼지와 경험치 획득!',
         inline: false
       },
       {
