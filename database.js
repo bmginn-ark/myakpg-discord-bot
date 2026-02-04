@@ -5,8 +5,24 @@ const path = require('path');
 // Railway Volume 사용 시: Variables에 DATA_DIR=/data 설정 (Volume 마운트 경로와 맞출 것)
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
+
+// 시작 시 항상 저장 경로 출력 (Railway 로그에서 확인 가능)
+console.log('[DB] 데이터 저장 경로:', DATA_FILE, process.env.DATA_DIR ? '(Volume 사용)' : '(⚠️ DATA_DIR 미설정 - 재배포 시 초기화됨)');
+
+// DATA_DIR이 설정된 경우 볼륨 쓰기 가능 여부 검증
 if (process.env.DATA_DIR) {
-  console.log('[DB] 데이터 저장 경로(Volume):', DATA_FILE);
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      console.log('[DB] Volume 디렉터리 생성:', DATA_DIR);
+    }
+    const testFile = path.join(DATA_DIR, '.volume_check');
+    fs.writeFileSync(testFile, Date.now().toString(), 'utf8');
+    fs.unlinkSync(testFile);
+    console.log('[DB] Volume 쓰기 검증 완료:', DATA_DIR);
+  } catch (err) {
+    console.error('[DB] ⚠️ Volume 쓰기 실패 - 데이터가 저장되지 않을 수 있음:', err.message);
+  }
 }
 
 // 데이터 로드
@@ -41,12 +57,15 @@ function saveData() {
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
   } catch (error) {
-    console.error('데이터 저장 오류:', error);
+    console.error('[DB] 데이터 저장 오류 - Volume 경로 확인 필요:', DATA_FILE, error.message);
   }
 }
 
 // 초기 데이터 로드
 let { users, characters, weapons, inventories } = loadData();
+const userCount = Object.keys(users).length;
+const charCount = Object.keys(characters).length;
+console.log('[DB] 로드 완료:', userCount, '유저,', charCount, '캐릭터 (파일:', DATA_FILE + ')');
 
 function getOrCreateUser(id) {
   if (!users[id]) {
