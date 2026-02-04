@@ -2,15 +2,20 @@
 const fs = require('fs');
 const path = require('path');
 
-// Railway Volume 사용 시: Variables에 DATA_DIR=/data 설정 (Volume 마운트 경로와 맞출 것)
-const DATA_DIR = process.env.DATA_DIR || __dirname;
+// Railway Volume: DATA_DIR 또는 Railway가 자동 설정하는 RAILWAY_VOLUME_MOUNT_PATH 사용
+const envDataDir = (process.env.DATA_DIR || '').trim();
+const railwayMount = (process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim();
+const DATA_DIR = envDataDir || railwayMount || __dirname;
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 
-// 시작 시 항상 저장 경로 출력 (Railway 로그에서 확인 가능)
-console.log('[DB] 데이터 저장 경로:', DATA_FILE, process.env.DATA_DIR ? '(Volume 사용)' : '(⚠️ DATA_DIR 미설정 - 재배포 시 초기화됨)');
+// 시작 시 저장 경로와 사용 중인 소스 출력 (Variables 미전달 시 Railway 자동 경로 사용)
+const source = envDataDir ? 'DATA_DIR' : (railwayMount ? 'RAILWAY_VOLUME_MOUNT_PATH' : '없음');
+console.log('[DB] 데이터 저장 경로:', DATA_FILE);
+console.log('[DB] 경로 소스:', source, source === '없음' ? '(⚠️ 재배포 시 초기화됨)' : '(Volume 사용)');
+if (source === '없음') console.log('[DB] 디버그 - DATA_DIR:', JSON.stringify(envDataDir || '(비어있음)'), 'RAILWAY_VOLUME_MOUNT_PATH:', JSON.stringify(railwayMount || '(비어있음)'));
 
-// DATA_DIR이 설정된 경우 볼륨 쓰기 가능 여부 검증
-if (process.env.DATA_DIR) {
+// Volume 경로를 쓸 때만 쓰기 검증
+if (DATA_DIR !== __dirname) {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
