@@ -56,10 +56,9 @@ function calculateAttendanceReward() {
   return 100; // 기본
 }
 
-// 잡동사니 (탐험 확률 %, 던전에서는 2배 확률로 적용)
+// 잡동사니 (탐험 확률 %, 던전에서는 2배 확률로 적용) — 작은열매는 회복 아이템으로 분리
 const junkItems = [
   { name: '동전', emoji: '🪙', price: 500, rate: 1 },
-  { name: '작은열매', emoji: '🍓', price: 100, rate: 20 },
   { name: '도토리', emoji: '🌰', price: 150, rate: 15 },
   { name: '들꽃', emoji: '🌸', price: 10, rate: 30 },
   { name: '나비날개', emoji: '🦋', price: 300, rate: 5 },
@@ -98,7 +97,7 @@ function calculateExplorationReward() {
   const itemRand = Math.random() * 100;
   let item = null;
   if (itemRand < 5) {
-    const items = ['랜덤박스', '조약돌', '나무열매', '모험기록'];
+    const items = ['랜덤박스', '조약돌', '나무열매', '모험기록', '작은열매'];
     item = items[Math.floor(Math.random() * items.length)];
   }
   const junk = rollJunkForExploration();
@@ -860,9 +859,19 @@ const shopItems = {
   '가시': { type: 'weapon', price: 100, emoji: '🌵', description: '공격력을 올려주는 무기' },
   '껍질': { type: 'weapon', price: 100, emoji: '🛡️', description: '방어력을 올려주는 무기' },
   '조약돌': { type: 'item', price: 200, emoji: '💎', description: '무기 강화에 사용' },
-  '나무열매': { type: 'item', price: 150, emoji: '🍒', description: '체력을 회복' },
+  '나무열매': { type: 'item', price: 150, emoji: '🍒', description: '체력 50 회복' },
+  '열매주스': { type: 'item', price: 200, emoji: '🍹', description: '체력 100 회복' },
+  '열매머핀': { type: 'item', price: 300, emoji: '🧁', description: '체력 200 회복' },
   '랜덤박스': { type: 'item', price: 300, emoji: '📦', description: '랜덤 아이템' },
   '모험기록': { type: 'item', price: 250, emoji: '📜', description: '경험치 획득량 증가' }
+};
+
+// 회복 아이템 (상점 외 드롭용: 작은열매)
+const recoveryItems = {
+  '나무열매': { heal: 50, emoji: '🍒' },
+  '열매주스': { heal: 100, emoji: '🍹' },
+  '열매머핀': { heal: 200, emoji: '🧁' },
+  '작은열매': { heal: 20, emoji: '🍓' }
 };
 
 // 되팔기/교환 가격 (상점 구매품 50%, 잡동사니는 고정 닢)
@@ -885,10 +894,12 @@ async function handleShop(message) {
   description += '🛡️ **껍질** - 100닢 (방어력)\n\n';
   description += '**아이템**\n';
   description += '💎 **조약돌** - 200닢 (무기 강화용)\n';
-  description += '🍒 **나무열매** - 150닢 (체력 회복)\n';
+  description += '🍒 **나무열매** - 150닢 (체력 50)\n';
+  description += '🍹 **열매주스** - 200닢 (체력 100)\n';
+  description += '🧁 **열매머핀** - 300닢 (체력 200)\n';
   description += '📦 **랜덤박스** - 300닢\n';
   description += '📜 **모험기록** - 250닢 (경험치 증가)\n\n';
-  description += '구매: `!구매 [아이템명]`\n되팔기: `!판매 [아이템명] (수량)` (구입가 50%)';
+  description += '구매: `!구매 [아이템명] (수량)` 예: !구매 나무열매 5\n되팔기: `!판매 [아이템명] (수량)` (구입가 50%)';
   embed.setDescription(description);
   message.reply({ embeds: [embed] });
 }
@@ -1008,12 +1019,34 @@ const USABLE_ITEMS = {
       db.removeItem(userId, actualName, 1);
       const itemName = RANDOM_BOX_POOL[Math.floor(Math.random() * RANDOM_BOX_POOL.length)];
       db.addItem(userId, itemName, 'item', 1);
-      const junk = junkItems.find(j => j.name === itemName);
-      const emoji = junk ? junk.emoji : (shopItems[itemName] ? shopItems[itemName].emoji : '📦');
+      const emoji = recoveryItems[itemName]?.emoji || junkItems.find(j => j.name === itemName)?.emoji || (shopItems[itemName] ? shopItems[itemName].emoji : '📦');
       return { ok: true, description: `${emoji} **${itemName}**을(를) 얻었습니다!`, color: 0x9B59B6 };
     }
   }
 };
+
+function makeRecoveryEffect(itemName) {
+  const info = recoveryItems[itemName];
+  if (!info) return null;
+  return (message, userId, opts = {}) => {
+    const actualName = opts.actualItemName || itemName;
+    const character = db.getOrCreateCharacter(userId);
+    if (character.current_hp >= character.max_hp) {
+      return { ok: false, message: '이미 체력이 최대입니다!' };
+    }
+    db.removeItem(userId, actualName, 1);
+    const hpBefore = character.current_hp;
+    const hpAfter = db.healHp(userId, info.heal);
+    return {
+      ok: true,
+      description: `${info.emoji} **${itemName}**을(를) 사용했습니다!\n\n체력: ${hpBefore} → ${hpAfter} / ${character.max_hp}`,
+      color: 0x00FF00
+    };
+  };
+}
+for (const name of Object.keys(recoveryItems)) {
+  USABLE_ITEMS[name] = { effect: makeRecoveryEffect(name) };
+}
 
 async function handleUseItem(message, args) {
   try {
@@ -1063,42 +1096,52 @@ async function handleUseItem(message, args) {
 // 상점 구매 처리
 async function handleBuy(message, args) {
   if (args.length < 1) {
-    return message.reply('사용법: `!구매 [아이템명]`\n`!상점`을 입력하면 판매 중인 아이템 목록을 볼 수 있습니다.');
+    return message.reply('사용법: `!구매 [아이템명] (수량)`\n예: `!구매 나무열매` 또는 `!구매 나무열매 5`\n`!상점`을 입력하면 판매 중인 아이템 목록을 볼 수 있습니다.');
   }
   
   const userId = message.author.id;
-  // 대괄호 제거 및 공백 정리
-  let itemName = args.join(' ').trim();
-  itemName = itemName.replace(/^\[|\]$/g, '').trim(); // [검] -> 검
+  const parts = [...args];
+  let quantity = 1;
+  if (parts.length > 0 && /^\d+$/.test(parts[parts.length - 1])) {
+    const num = parseInt(parts[parts.length - 1], 10);
+    if (num >= 1) {
+      quantity = Math.min(num, 999);
+      parts.pop();
+    }
+  }
+  let itemName = parts.join(' ').trim();
+  itemName = itemName.replace(/^\[|\]$/g, '').trim();
+  if (!itemName) {
+    return message.reply('아이템 이름을 입력하세요. (예: `!구매 나무열매 5`)');
+  }
   
   // shopItems에서 찾기 (대소문자 구분 없이)
   let item = shopItems[itemName];
-  
-  // 찾지 못한 경우 부분 일치로 재시도
   if (!item) {
     const lowerItemName = itemName.toLowerCase();
     for (const [key, value] of Object.entries(shopItems)) {
       if (key.toLowerCase() === lowerItemName) {
         item = value;
-        itemName = key; // 원본 키 사용
+        itemName = key;
         break;
       }
     }
   }
   
   if (!item) {
-    return message.reply(`"${itemName}"은(는) 판매하지 않는 아이템입니다.\n` + 
+    return message.reply(`"${itemName}"은(는) 판매하지 않는 아이템입니다.\n` +
       '`!상점`을 입력하면 판매 중인 아이템 목록을 볼 수 있습니다.');
   }
   
+  if (item.type === 'weapon') quantity = 1;
+  const totalPrice = item.price * quantity;
   const user = db.getOrCreateUser(userId);
-  const price = item.price;
   const currentDust = Math.max(0, user.dust || 0);
   
-  if (currentDust < price) {
-    return message.reply(`닢이 부족합니다. 필요: ${price}닢, 보유: ${currentDust}닢`);
+  if (currentDust < totalPrice) {
+    return message.reply(`닢이 부족합니다. 필요: ${totalPrice}닢 (${itemName} ${quantity}개), 보유: ${currentDust}닢`);
   }
-  db.subtractDust(userId, price);
+  db.subtractDust(userId, totalPrice);
   const afterUser = db.getOrCreateUser(userId);
   const displayDust = Math.max(0, afterUser.dust || 0);
   const embed = new EmbedBuilder()
@@ -1109,8 +1152,8 @@ async function handleBuy(message, args) {
     db.equipWeapon(userId, itemName);
     embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매하고 장착했습니다!\n\n보유 닢: ${displayDust}닢`);
   } else {
-    db.addItem(userId, itemName, 'item', 1);
-    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매했습니다!\n\n보유 닢: ${displayDust}닢`);
+    db.addItem(userId, itemName, 'item', quantity);
+    embed.setDescription(`${item.emoji} **${itemName}** ${quantity}개를 구매했습니다! (${totalPrice}닢)\n\n보유 닢: ${displayDust}닢`);
   }
   message.reply({ embeds: [embed] });
 }
@@ -1144,12 +1187,12 @@ async function handleHelp(message) {
       },
       {
         name: '🏪 상점 / 아이템',
-        value: '`!상점` - 상점\n`!구매 [아이템명]` - 구매\n`!판매 [아이템명] (수량)` - 되팔기/잡동사니 교환\n`!박스열기` / `!사용 랜덤박스` - 랜덤박스 열기\n`!사용 [아이템이름]` - 아이템 사용 (예: 모험기록, 랜덤박스)',
+        value: '`!상점` - 상점\n`!구매 [아이템명] (수량)` - 구매 (예: !구매 나무열매 5)\n`!판매 [아이템명] (수량)` - 되팔기/잡동사니 교환\n`!박스열기` / `!사용 랜덤박스` - 랜덤박스 열기\n`!사용 [아이템이름]` - 아이템 사용 (예: 모험기록, 랜덤박스)',
         inline: false
       },
       {
         name: '💊 회복',
-        value: '`!회복` - 나무열매 사용 (체력 50 회복)',
+        value: '`!회복` - 나무열매 1개 사용 (체력 50)\n`!사용 [회복약]` - 나무열매/열매주스/열매머핀/작은열매 (체력 50/100/200/20)',
         inline: false
       },
       {
@@ -1367,10 +1410,11 @@ async function handleDungeonExplore(message) {
     db.addDust(userId, reward);
     let itemReward = '';
     if (Math.random() < 0.2) {
-      const items = ['조약돌', '나무열매', '랜덤박스'];
+      const items = ['조약돌', '나무열매', '랜덤박스', '작은열매'];
       const randomItem = items[Math.floor(Math.random() * items.length)];
       db.addItem(userId, randomItem, 'item', 1);
-      itemReward = `\n📦 ${randomItem} 획득!`;
+      const itemEmoji = recoveryItems[randomItem]?.emoji || shopItems[randomItem]?.emoji || '📦';
+      itemReward = `\n${itemEmoji} ${randomItem} 획득!`;
     }
     const dungeonJunk = rollJunkForDungeon();
     for (const j of dungeonJunk) {
