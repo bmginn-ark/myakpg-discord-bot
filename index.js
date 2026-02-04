@@ -53,6 +53,38 @@ function calculateAttendanceReward() {
   return 100; // 기본
 }
 
+// 잡동사니 (탐험 확률 %, 던전에서는 2배 확률로 적용)
+const junkItems = [
+  { name: '동전', emoji: '🪙', price: 500, rate: 1 },
+  { name: '작은열매', emoji: '🍓', price: 100, rate: 20 },
+  { name: '도토리', emoji: '🌰', price: 150, rate: 15 },
+  { name: '들꽃', emoji: '🌸', price: 10, rate: 30 },
+  { name: '나비날개', emoji: '🦋', price: 300, rate: 5 },
+  { name: '깃털', emoji: '🪶', price: 200, rate: 10 }
+];
+function rollJunkItemOnce() {
+  const roll = Math.random() * 100;
+  let acc = 0;
+  for (const j of junkItems) {
+    acc += j.rate;
+    if (roll < acc) return j.name;
+  }
+  return null;
+}
+
+function rollJunkForExploration() {
+  return rollJunkItemOnce();
+}
+
+function rollJunkForDungeon() {
+  const results = [];
+  const a = rollJunkItemOnce();
+  const b = rollJunkItemOnce();
+  if (a) results.push(a);
+  if (b) results.push(b);
+  return results;
+}
+
 // 탐험 보상 계산
 function calculateExplorationReward() {
   const dustRand = Math.random() * 100;
@@ -66,7 +98,8 @@ function calculateExplorationReward() {
     const items = ['랜덤 박스', '조약돌', '나무열매', '모험기록'];
     item = items[Math.floor(Math.random() * items.length)];
   }
-  return { dust, item };
+  const junk = rollJunkForExploration();
+  return { dust, item, junk };
 }
 
 // Gemini API로 탐험 코멘트 생성
@@ -76,14 +109,18 @@ async function generateExplorationComment() {
       '나뭇잎이 흩어진 숲길을 걸었습니다.',
       '작은 골목을 탐험했습니다.',
       '땅굴 입구를 찾았습니다.',
-      '도마뱀이 지나간 자리를 봤습니다.'
+      '뱀이 지나간 자리를 봤습니다.',
+      '고양이의 발자국을 발견했습니다.',
+      '덤불 속에서 수상한 소리가 들립니다.',
+      '뱀 허물이 구석진 곳에서 반짝입니다.',
+      '까마귀가 푸드덕 날아갑니다.'
     ];
     return defaultComments[Math.floor(Math.random() * defaultComments.length)];
   }
   
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const prompt = '판타지 RPG 게임의 탐험 결과를 80자 이내로 간단하고 재미있게 묘사해주세요. 한국어로 작성해주세요.';
+    const prompt = '작은 생물이 자연을 탐험하는 내용을 80자 이내로 간단하고 재미있게 묘사해주세요. 한국어로 작성해주세요.';
     
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -109,8 +146,12 @@ async function generateExplorationComment() {
       '작은 골목을 탐험했습니다.',
       '빗물이 고인 웅덩이를 발견했습니다.',
       '땅굴 입구를 찾았습니다.',
-      '도마뱀이 지나간 자리를 봤습니다.',
-      '멧쥐가 먹다 남긴 나뭇열매를 찾았습니다.'
+      '뱀이 지나간 자리를 봤습니다.',
+      '멧쥐가 먹다 남긴 나뭇열매를 찾았습니다.',
+      '고양이의 발자국을 발견했습니다.',
+      '덤불 속에서 수상한 소리가 들립니다.',
+      '뱀 허물이 구석진 곳에서 반짝입니다.',
+      '까마귀가 푸드덕 날아갑니다.'
     ];
     return defaultComments[Math.floor(Math.random() * defaultComments.length)];
   }
@@ -118,10 +159,10 @@ async function generateExplorationComment() {
 
 // 무기 강화 확률 계산
 function calculateEnhancementChance(currentLevel) {
-  if (currentLevel < 5) return 0.9;      // 90%
-  if (currentLevel < 10) return 0.7;     // 70%
-  if (currentLevel < 15) return 0.5;     // 50%
-  if (currentLevel < 20) return 0.3;     // 30%
+  if (currentLevel < 5) return 0.7;      // 70%
+  if (currentLevel < 10) return 0.5;     // 50%
+  if (currentLevel < 15) return 0.2;     // 20%
+  if (currentLevel < 20) return 0.1;     // 10%
   return 0;
 }
 
@@ -198,6 +239,12 @@ client.on('messageCreate', async (message) => {
       case '!구매':
         await handleBuy(message, args);
         break;
+      case '!판매':
+        await handleSell(message, args);
+        break;
+      case '!박스열기':
+        await handleOpenRandomBox(message);
+        break;
       case '!도움말':
         await handleHelp(message);
         break;
@@ -247,7 +294,7 @@ async function handleAttendance(message) {
   
   const embed = new EmbedBuilder()
     .setTitle('출석 완료!')
-    .setDescription(`${character.name}이(가) 닢 길드에 모습을 보였습니다.\n\n${reward}닢을 획득했습니다!\n\n보유 닢: ${displayDust}닢`)
+    .setDescription(`${character.name}이(가) 나뭇잎 길드에 모습을 보였습니다.\n\n${reward}닢을 획득했습니다!\n\n보유 닢: ${displayDust}닢`)
     .setColor(0x00FF00)
     .setTimestamp();
   
@@ -278,17 +325,11 @@ async function handleExploration(message) {
   // 먼지는 항상 획득
   db.addDust(userId, reward.dust);
   
-  // 아이템은 확률적으로 획득
-  if (reward.item) {
-    db.addItem(userId, reward.item, 'item');
-  }
+  if (reward.item) db.addItem(userId, reward.item, 'item');
+  if (reward.junk) db.addItem(userId, reward.junk, 'item', 1);
   
-  // 경험치 추가
   const levelResult = db.addExp(userId, 1);
-  
-  // 탐험 코멘트 생성
   const explorationComment = await generateExplorationComment();
-  
   const updatedUser = db.getOrCreateUser(userId);
   
   const embed = new EmbedBuilder()
@@ -298,8 +339,10 @@ async function handleExploration(message) {
   
   let description = `📖 ${explorationComment}\n\n`;
   description += `💰 ${reward.dust}닢을 획득했습니다!\n`;
-  if (reward.item) {
-    description += `📦 ${reward.item}을(를) 획득했습니다!\n`;
+  if (reward.item) description += `📦 ${reward.item}을(를) 획득했습니다!\n`;
+  if (reward.junk) {
+    const j = junkItems.find(x => x.name === reward.junk);
+    description += `${j ? j.emoji : '🪙'} ${reward.junk}을(를) 주웠습니다!\n`;
   }
   description += `✨ 경험치 +1\n`;
   description += `\n보유 닢: ${Math.max(0, updatedUser.dust || 0)}닢\n`;
@@ -816,9 +859,18 @@ const shopItems = {
   '껍질': { type: 'weapon', price: 100, emoji: '🛡️', description: '방어력을 올려주는 무기' },
   '조약돌': { type: 'item', price: 200, emoji: '💎', description: '무기 강화에 사용' },
   '나무열매': { type: 'item', price: 150, emoji: '🍒', description: '체력을 회복' },
-  '랜덤 박스': { type: 'item', price: 300, emoji: '📦', description: '랜덤 아이템' },
+  '랜덤박스': { type: 'item', price: 300, emoji: '📦', description: '랜덤 아이템' },
   '모험기록': { type: 'item', price: 250, emoji: '📜', description: '경험치 획득량 증가' }
 };
+
+// 되팔기/교환 가격 (상점 구매품 50%, 잡동사니는 고정 닢)
+function getSellPrice(itemName) {
+  const item = shopItems[itemName];
+  if (item) return Math.floor(item.price * 0.5);
+  const junk = junkItems.find(j => j.name === itemName);
+  if (junk) return junk.price;
+  return null;
+}
 
 // 상점 표시
 async function handleShop(message) {
@@ -832,10 +884,99 @@ async function handleShop(message) {
   description += '**아이템**\n';
   description += '💎 **조약돌** - 200닢 (무기 강화용)\n';
   description += '🍒 **나무열매** - 150닢 (체력 회복)\n';
-  description += '📦 **랜덤 박스** - 300닢\n';
+  description += '📦 **랜덤박스** - 300닢\n';
   description += '📜 **모험기록** - 250닢 (경험치 증가)\n\n';
-  description += '구매: `!구매 [아이템명]`';
+  description += '구매: `!구매 [아이템명]`\n되팔기: `!판매 [아이템명] (수량)` (구입가 50%)';
   embed.setDescription(description);
+  message.reply({ embeds: [embed] });
+}
+
+// 되팔기(판매) 처리
+async function handleSell(message, args) {
+  if (args.length < 1) {
+    return message.reply('사용법: `!판매 [아이템명] (수량)`\n예: `!판매 나무열매` 또는 `!판매 조약돌 3`\n수량을 생략하면 1개 판매됩니다.');
+  }
+  
+  const userId = message.author.id;
+  const inventory = db.getInventory(userId);
+  
+  let itemName = args.join(' ').trim();
+  itemName = itemName.replace(/^\[|\]$/g, '').trim();
+  
+  let quantity = 1;
+  const lastArg = args[args.length - 1];
+  const num = parseInt(lastArg, 10);
+  if (!isNaN(num) && num >= 1 && String(num) === lastArg) {
+    quantity = num;
+    itemName = args.slice(0, -1).join(' ').trim();
+    if (!itemName) {
+      return message.reply('사용법: `!판매 [아이템명] (수량)`');
+    }
+  }
+  
+  let canonicalName = itemName;
+  if (getSellPrice(itemName) === null) {
+    const lower = itemName.toLowerCase();
+    for (const key of Object.keys(shopItems)) {
+      if (key.toLowerCase() === lower) { canonicalName = key; break; }
+    }
+    if (getSellPrice(canonicalName) === null) {
+      for (const j of junkItems) {
+        if (j.name.toLowerCase() === lower) { canonicalName = j.name; break; }
+      }
+    }
+  }
+  const sellPrice = getSellPrice(canonicalName);
+  if (sellPrice === null) {
+    const names = [...Object.keys(shopItems), ...junkItems.map(j => j.name)].join(', ');
+    return message.reply(`되팔/교환할 수 없는 아이템입니다. 가능: ${names}`);
+  }
+  itemName = canonicalName;
+  
+  const invEntry = inventory.find(i => i.item_name === itemName);
+  if (!invEntry || invEntry.quantity < quantity) {
+    const have = invEntry ? invEntry.quantity : 0;
+    return message.reply(`보유 수량이 부족합니다. **${itemName}** 보유: ${have}개, 요청: ${quantity}개`);
+  }
+  
+  db.removeItem(userId, itemName, quantity);
+  const totalEarned = sellPrice * quantity;
+  db.addDust(userId, totalEarned);
+  
+  const afterUser = db.getOrCreateUser(userId);
+  const displayDust = Math.max(0, afterUser.dust || 0);
+  
+  const item = shopItems[itemName];
+  const junk = junkItems.find(j => j.name === itemName);
+  const emoji = item ? item.emoji : (junk ? junk.emoji : '📦');
+  const embed = new EmbedBuilder()
+    .setTitle('되팔기 완료!')
+    .setDescription(`${emoji} **${itemName}** ${quantity}개를 ${totalEarned}닢에 되팔았습니다.\n\n보유 닢: ${displayDust}닢`)
+    .setColor(0x00FF00)
+    .setTimestamp();
+  message.reply({ embeds: [embed] });
+}
+
+// 랜덤 박스 열기 (잡동사니 포함 풀)
+const RANDOM_BOX_POOL = ['조약돌', '나무열매', '모험기록', '동전', '작은열매', '도토리', '들꽃', '나비날개', '깃털'];
+
+async function handleOpenRandomBox(message) {
+  const userId = message.author.id;
+  const inventory = db.getInventory(userId);
+  const toUse = inventory.find(i => i.item_name === '랜덤 박스' || i.item_name === '랜덤박스');
+  if (!toUse || toUse.quantity < 1) {
+    return message.reply('랜덤 박스가 없습니다. 상점·탐험·땅굴에서 얻을 수 있습니다.');
+  }
+  db.removeItem(userId, toUse.item_name, 1);
+  const itemName = RANDOM_BOX_POOL[Math.floor(Math.random() * RANDOM_BOX_POOL.length)];
+  db.addItem(userId, itemName, 'item', 1);
+  const junk = junkItems.find(j => j.name === itemName);
+  const emoji = junk ? junk.emoji : (shopItems[itemName] ? shopItems[itemName].emoji : '📦');
+  const embed = new EmbedBuilder()
+    .setTitle('📦 랜덤 박스 열기')
+    .setDescription(`${emoji} **${itemName}**을(를) 얻었습니다!`)
+    .setColor(0x9B59B6)
+    .setTimestamp();
   message.reply({ embeds: [embed] });
 }
 
@@ -923,7 +1064,7 @@ async function handleHelp(message) {
       },
       {
         name: '🏪 상점',
-        value: '`!상점` - 상점\n`!구매 [아이템명]` - 구매',
+        value: '`!상점` - 상점\n`!구매 [아이템명]` - 구매\n`!판매 [아이템명] (수량)` - 되팔기/잡동사니 교환\n`!박스열기` - 랜덤 박스 사용',
         inline: false
       },
       {
@@ -1110,6 +1251,12 @@ async function handleDungeonExplore(message) {
       const randomItem = items[Math.floor(Math.random() * items.length)];
       db.addItem(userId, randomItem, 'item', 1);
       itemReward = `\n📦 ${randomItem} 획득!`;
+    }
+    const dungeonJunk = rollJunkForDungeon();
+    for (const j of dungeonJunk) {
+      db.addItem(userId, j, 'item', 1);
+      const jinfo = junkItems.find(x => x.name === j);
+      itemReward += `\n${jinfo ? jinfo.emoji : '🪙'} ${j} 발견!`;
     }
     const newFloor = db.advanceDungeonFloor(userId);
     const charNow = db.getOrCreateCharacter(userId);
