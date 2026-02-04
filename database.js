@@ -66,6 +66,10 @@ function getOrCreateUser(id) {
     };
     saveData();
   }
+  // 이전 데이터 오류로 음수 먼지가 저장된 경우 보정
+  if (users[id].dust != null && users[id].dust < 0) {
+    users[id].dust = 0;
+  }
   return users[id];
 }
 
@@ -102,7 +106,10 @@ function addDust(id, amount) {
 }
 
 function subtractDust(id, amount) {
-  getOrCreateUser(id).dust = Math.max(0, getOrCreateUser(id).dust - amount);
+  const user = getOrCreateUser(id);
+  const current = Math.max(0, user.dust || 0);
+  const deduct = Math.min(amount, current); // 절대 보유량 초과 차감 방지
+  user.dust = current - deduct;
   saveData();
 }
 

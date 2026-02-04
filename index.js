@@ -249,26 +249,30 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// 출석 처리
+// 출석 처리 (하루 1회만 가능, 중복 요청 방지)
 async function handleAttendance(message) {
   const userId = message.author.id;
   const today = new Date().toISOString().split('T')[0];
   const user = db.getOrCreateUser(userId);
+  const lastDate = user.last_attendance_date == null ? '' : String(user.last_attendance_date);
   
-  if (user.last_attendance_date === today) {
+  if (lastDate === today) {
     return message.reply('오늘은 이미 출석했습니다!');
   }
+  
+  // 보상 지급 전에 먼저 출석일 기록 (중복 출석 방지)
+  db.setAttendance(userId, today);
   
   const character = db.getOrCreateCharacter(userId);
   const reward = calculateAttendanceReward();
   db.addDust(userId, reward);
-  db.setAttendance(userId, today);
   
   const updatedUser = db.getOrCreateUser(userId);
+  const displayDust = Math.max(0, updatedUser.dust || 0);
   
   const embed = new EmbedBuilder()
     .setTitle('출석 완료!')
-    .setDescription(`${character.name}이(가) 먼지 길드에 모습을 보였습니다.\n\n${reward}먼지를 획득했습니다!\n\n보유 먼지: ${updatedUser.dust}먼지`)
+    .setDescription(`${character.name}이(가) 먼지 길드에 모습을 보였습니다.\n\n${reward}먼지를 획득했습니다!\n\n보유 먼지: ${displayDust}먼지`)
     .setColor(0x00FF00)
     .setTimestamp();
   
@@ -346,7 +350,8 @@ async function handleInventory(message) {
     .setColor(0x9B59B6)
     .setTimestamp();
   
-  let description = `보유 먼지: ${user.dust}먼지\n\n`;
+  const displayDust = Math.max(0, user.dust || 0);
+  let description = `보유 먼지: ${displayDust}먼지\n\n`;
   
   // 장착한 무기 정보 표시
   if (weapon) {
@@ -433,7 +438,7 @@ async function handleCharacter(message) {
     .addFields(
       { name: '레벨', value: `${character.level}`, inline: true },
       { name: '경험치', value: `${character.exp}/${(character.level + 1) * 5}`, inline: true },
-      { name: '먼지', value: `${user.dust}`, inline: true },
+      { name: '먼지', value: `${Math.max(0, user.dust || 0)}`, inline: true },
       { name: '체력', value: `${character.current_hp}/${character.max_hp}`, inline: true },
       { name: '공격력', value: `${character.attack + attackBonus}${attackBonus > 0 ? ` (+${attackBonus})` : ''}`, inline: true },
       { name: '방어력', value: `${character.defense + defenseBonus}${defenseBonus > 0 ? ` (+${defenseBonus})` : ''}`, inline: true },
@@ -1133,12 +1138,15 @@ async function handleBuy(message, args) {
   
   const user = db.getOrCreateUser(userId);
   const price = item.price;
+  const currentDust = Math.max(0, user.dust || 0);
   
-  if (user.dust < price) {
-    return message.reply(`먼지가 부족합니다. 필요: ${price}먼지, 보유: ${user.dust}먼지`);
+  if (currentDust < price) {
+    return message.reply(`먼지가 부족합니다. 필요: ${price}먼지, 보유: ${currentDust}먼지`);
   }
   
   db.subtractDust(userId, price);
+  const afterUser = db.getOrCreateUser(userId);
+  const displayDust = Math.max(0, afterUser.dust || 0);
   
   const embed = new EmbedBuilder()
     .setTitle('구매 완료!')
@@ -1146,21 +1154,18 @@ async function handleBuy(message, args) {
     .setTimestamp();
   
   if (item.type === 'weapon') {
-    // 무기 구매 시 자동 장착
     db.equipWeapon(userId, itemName);
-    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매하고 장착했습니다!\n\n보유 먼지: ${user.dust - price}먼지`);
+    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매하고 장착했습니다!\n\n보유 먼지: ${displayDust}먼지`);
     message.reply({ embeds: [embed] });
   } else if (item.type === 'skillbook') {
-    // 스킬북 구매 시 인벤토리에 추가
     db.addItem(userId, itemName, 'item', 1);
     embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매했습니다!\n\n` +
       `스킬 타입을 선택하세요: \`!스킬선택 [불/물/풀/땅/바람]\`\n` +
-      `예: \`!스킬선택 불\`\n\n보유 먼지: ${user.dust - price}먼지`);
+      `예: \`!스킬선택 불\`\n\n보유 먼지: ${displayDust}먼지`);
     message.reply({ embeds: [embed] });
   } else {
-    // 아이템 구매 시 인벤토리에 추가
     db.addItem(userId, itemName, 'item', 1);
-    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매했습니다!\n\n보유 먼지: ${user.dust - price}먼지`);
+    embed.setDescription(`${item.emoji} **${itemName}**을(를) 구매했습니다!\n\n보유 먼지: ${displayDust}먼지`);
     message.reply({ embeds: [embed] });
   }
 }
@@ -1395,14 +1400,18 @@ async function handleDungeonExplore(message) {
         const prompt = `판타지 RPG 게임에서 플레이어가 던전 ${floor}층에서 몬스터와 전투하는 장면을 80자 이내로 간단하고 재미있게 묘사해주세요. 한국어로 작성해주세요.`;
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        battleComment = response.text().trim();
-        if (battleComment.length > 80) {
-          battleComment = battleComment.substring(0, 77) + '...';
+        if (response && response.text) {
+          const text = response.text().trim();
+          if (text) {
+            battleComment = text.length > 80 ? text.substring(0, 77) + '...' : text;
+          }
         }
+        if (!battleComment) battleComment = `${floor}층의 몬스터와 전투를 벌였습니다!`;
       } else {
         battleComment = `${floor}층의 몬스터와 전투를 벌였습니다!`;
       }
     } catch (error) {
+      console.error('[던전 Gemini] 배틀 멘트 생성 오류:', error.message || error);
       battleComment = `${floor}층의 몬스터와 전투를 벌였습니다!`;
     }
     
