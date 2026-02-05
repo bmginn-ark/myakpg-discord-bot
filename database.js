@@ -1,185 +1,62 @@
-// JSON 파일로 데이터 저장/로드
+// 간단한 파일 기반 데이터베이스: Railway 데이터 볼륨에 저장
 const fs = require('fs');
 const path = require('path');
 
-// Railway Volume: DATA_DIR 또는 Railway가 자동 설정하는 RAILWAY_VOLUME_MOUNT_PATH 사용
-const envDataDir = (process.env.DATA_DIR || '').trim();
-const railwayMount = (process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim();
-const DATA_DIR = envDataDir || railwayMount || __dirname;
-const DATA_FILE = path.join(DATA_DIR, 'data.json');
+const dataFile = path.join(__dirname, 'data.json');
 
-// 시작 시 저장 경로와 사용 중인 소스 출력 (Variables 미전달 시 Railway 자동 경로 사용)
-const source = envDataDir ? 'DATA_DIR' : (railwayMount ? 'RAILWAY_VOLUME_MOUNT_PATH' : '없음');
-console.log('[DB] 데이터 저장 경로:', DATA_FILE);
-console.log('[DB] 경로 소스:', source, source === '없음' ? '(⚠️ 재배포 시 초기화됨)' : '(Volume 사용)');
-if (source === '없음') console.log('[DB] 디버그 - DATA_DIR:', JSON.stringify(envDataDir || '(비어있음)'), 'RAILWAY_VOLUME_MOUNT_PATH:', JSON.stringify(railwayMount || '(비어있음)'));
-
-// Volume 경로를 쓸 때만 쓰기 검증
-if (DATA_DIR !== __dirname) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-      console.log('[DB] Volume 디렉터리 생성:', DATA_DIR);
-    }
-    const testFile = path.join(DATA_DIR, '.volume_check');
-    fs.writeFileSync(testFile, Date.now().toString(), 'utf8');
-    fs.unlinkSync(testFile);
-    console.log('[DB] Volume 쓰기 검증 완료:', DATA_DIR);
-  } catch (err) {
-    console.error('[DB] ⚠️ Volume 쓰기 실패 - 데이터가 저장되지 않을 수 있음:', err.message);
-  }
-}
-
-// 데이터 로드
+// 데이터 로드 함수 (봇 시작 시 호출)
 function loadData() {
   try {
-    if (fs.existsSync(DATA_FILE)) {
-      const data = fs.readFileSync(DATA_FILE, 'utf8');
-      return JSON.parse(data);
+    if (fs.existsSync(dataFile)) {
+      const rawData = fs.readFileSync(dataFile, 'utf8');
+      return JSON.parse(rawData);
     }
   } catch (error) {
     console.error('데이터 로드 오류:', error);
   }
-  return {
-    users: {},
-    characters: {},
-    weapons: {},
-    inventories: {}
-  };
+  // 기본 빈 데이터 구조
+  return { users: {}, characters: {}, weapons: {}, inventories: {}, skills: {} };
 }
 
-// 데이터 저장
+// 데이터 저장 함수 (변경 시 호출)
 function saveData() {
   try {
-    if (DATA_DIR !== __dirname && !fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    const data = {
-      users,
-      characters,
-      weapons,
-      inventories
-    };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+    fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf8');
   } catch (error) {
-    console.error('[DB] 데이터 저장 오류 - Volume 경로 확인 필요:', DATA_FILE, error.message);
+    console.error('데이터 저장 오류:', error);
   }
 }
 
-// 초기 데이터 로드
-let { users, characters, weapons, inventories } = loadData();
-const userCount = Object.keys(users).length;
-const charCount = Object.keys(characters).length;
-console.log('[DB] 로드 완료:', userCount, '유저,', charCount, '캐릭터 (파일:', DATA_FILE + ')');
+// 데이터 객체 초기화
+let data = loadData();
 
+// 사용자 관련 함수
 function getOrCreateUser(id) {
-  if (!users[id]) {
-    users[id] = { 
-      dust: 0, 
-      last_attendance_date: null, 
-      last_exploration_date: null, 
-      exploration_count: 0, 
-      last_battle_date: null, 
-      battle_count: 0, 
-      last_heal_date: null,
-      in_dungeon: false,
-      dungeon_floor: 0
-    };
-    saveData();
-  }
-  // 이전 데이터 오류로 음수 먼지가 저장된 경우 보정
-  if (users[id].dust != null && users[id].dust < 0) {
-    users[id].dust = 0;
-  }
-  if (!users[id].last_item_use || typeof users[id].last_item_use !== 'object') {
-    users[id].last_item_use = {};
-  }
-  return users[id];
-}
-
-/** 아이템 오늘 사용 가능 여부 (일일 1회 제한 아이템용) */
-function canUseItemToday(id, itemName) {
-  const user = getOrCreateUser(id);
-  const today = new Date().toISOString().split('T')[0];
-  const last = user.last_item_use[itemName];
-  return last !== today;
-}
-
-/** 아이템 사용일 기록 (일일 1회 제한 아이템 사용 시 호출) */
-function setLastItemUse(id, itemName, date) {
-  const user = getOrCreateUser(id);
-  user.last_item_use[itemName] = date;
-  saveData();
+  if (!data.users[id]) data.users[id] = { dust: 0, last_attendance_date: null, last_exploration_date: null, exploration_count: 0 };
+  return data.users[id];
 }
 
 function getOrCreateCharacter(id) {
-  if (!characters[id]) {
-    characters[id] = { 
-      name: '모험가', 
-      level: 0, 
-      exp: 0, 
-      current_hp: 50, 
-      max_hp: 50, 
-      attack: 10, 
-      defense: 10
-    };
-    saveData();
-  }
-  return characters[id];
+  if (!data.characters[id]) data.characters[id] = { name: `플레이어_${id.slice(-4)}`, level: 1, exp: 0, current_hp: 100, max_hp: 100, attack: 10, defense: 5, magic: 3 };
+  return data.characters[id];
 }
 
 function getInventory(id) {
-  if (!inventories[id]) {
-    inventories[id] = [];
-    saveData();
-  }
-  return inventories[id];
+  if (!data.inventories[id]) data.inventories[id] = [];
+  return data.inventories[id];
 }
 
-function addDust(id, amount) {
-  getOrCreateUser(id).dust += amount;
-  saveData();
-}
+function addDust(id, amount) { getOrCreateUser(id).dust += amount; saveData(); }
+function subtractDust(id, amount) { getOrCreateUser(id).dust = Math.max(0, getOrCreateUser(id).dust - amount); saveData(); }
 
-function subtractDust(id, amount) {
-  const user = getOrCreateUser(id);
-  const current = Math.max(0, user.dust || 0);
-  const deduct = Math.min(amount, current); // 절대 보유량 초과 차감 방지
-  user.dust = current - deduct;
-  saveData();
-}
-
-function setAttendance(id, date) {
-  getOrCreateUser(id).last_attendance_date = date;
-  saveData();
-}
-function resetExplorationCount(id) {
-  const user = getOrCreateUser(id);
-  const today = new Date().toISOString().split('T')[0];
-  user.exploration_count = 0;
-  user.last_exploration_date = today;
-  saveData();
-}
-
-function incrementExploration(id) {
-  const user = getOrCreateUser(id);
-  const today = new Date().toISOString().split('T')[0];
-  if (user.last_exploration_date !== today) {
-    resetExplorationCount(id);
-  }
-  user.exploration_count = (user.exploration_count || 0) + 1;
-  user.last_exploration_date = today;
-  saveData();
-}
+function setAttendance(id, date) { getOrCreateUser(id).last_attendance_date = date; saveData(); }
+function resetExplorationCount(id) { getOrCreateUser(id).exploration_count = 0; saveData(); }
+function incrementExploration(id) { getOrCreateUser(id).exploration_count = (getOrCreateUser(id).exploration_count || 0) + 1; saveData(); }
 
 function addItem(id, name, type = 'item', qty = 1) {
   const inv = getInventory(id);
   const it = inv.find(i => i.item_name === name);
-  if (it) {
-    it.quantity += qty;
-  } else {
-    inv.push({ item_name: name, item_type: type, quantity: qty });
-  }
+  if (it) it.quantity += qty; else inv.push({ item_name: name, item_type: type, quantity: qty });
   saveData();
 }
 
@@ -194,246 +71,37 @@ function removeItem(id, name, qty = 1) {
   return true;
 }
 
-function getWeapon(id) { return weapons[id] || null; }
-
-function equipWeapon(id, type) {
-  if (!weapons[id]) {
-    weapons[id] = { weapon_type: type, enhancement: 0, enhancements: { '가시': 0, '껍질': 0 } };
-  } else {
-    if (!weapons[id].enhancements) {
-      weapons[id].enhancements = { '가시': 0, '껍질': 0 };
-      if (weapons[id].weapon_type) {
-        weapons[id].enhancements[weapons[id].weapon_type] = weapons[id].enhancement || 0;
-      }
-    }
-    weapons[id].weapon_type = type;
-    weapons[id].enhancement = weapons[id].enhancements[type] || 0;
-  }
-  saveData();
-}
-
+function getWeapon(id) { return data.weapons[id] || null; }
+function equipWeapon(id, type) { data.weapons[id] = { weapon_type: type, enhancement: 0 }; saveData(); }
 function enhanceWeapon(id, success, destroyed) {
-  if (!weapons[id]) return false;
-  
-  if (!weapons[id].enhancements) {
-    weapons[id].enhancements = { '가시': 0, '껍질': 0 };
-    if (weapons[id].weapon_type) {
-      weapons[id].enhancements[weapons[id].weapon_type] = weapons[id].enhancement || 0;
-    }
-  }
-  
-  const weaponType = weapons[id].weapon_type;
-  
-  if (destroyed) {
-    // 무기 파괴 시 해당 타입의 강화 레벨만 초기화
-    weapons[id].enhancements[weaponType] = 0;
-    weapons[id].enhancement = 0;
-    saveData();
-    return { success: false, destroyed: true };
-  }
-  if (success) {
-    // 강화 성공 시 해당 타입의 강화 레벨 증가
-    const newLevel = Math.min(20, (weapons[id].enhancements[weaponType] || 0) + 1);
-    weapons[id].enhancements[weaponType] = newLevel;
-    weapons[id].enhancement = newLevel;
-    saveData();
-    return { success: true, destroyed: false, newLevel: newLevel };
-  }
-  return { success: false, destroyed: false };
+  if (!data.weapons[id]) return null;
+  if (destroyed) { delete data.weapons[id]; saveData(); return { destroyed: true }; }
+  if (success) { data.weapons[id].enhancement = Math.min(20, data.weapons[id].enhancement + 1); saveData(); return { newLevel: data.weapons[id].enhancement }; }
+  saveData();
+  return { newLevel: data.weapons[id].enhancement };
 }
 
-// 레벨업 필요 경험치: 5, 10, 20, 35, 55, 80, … (차이 +5, +10, +15 …)
-function getRequiredExpForLevel(level) {
-  return 5 + 5 * level * (level + 1) / 2;
+function getOrCreateSkill(id) {
+  if (!data.skills[id]) data.skills[id] = { skill_name: '기본 스킬', skill_level: 1 };
+  return data.skills[id];
 }
+function enhanceSkill(id, success) { if (!data.skills[id]) getOrCreateSkill(id); if (success) data.skills[id].skill_level += 1; saveData(); }
 
 function addExp(id, amount) {
   const char = getOrCreateCharacter(id);
   const oldLevel = char.level;
-  let newExp = char.exp + amount;
-  let newLevel = char.level;
-  
-  while (newLevel < 20) {
-    const requiredExp = getRequiredExpForLevel(newLevel);
-    if (newExp >= requiredExp) {
-      newExp -= requiredExp;
-      newLevel++;
-    } else {
-      break;
-    }
-  }
-  
-  const maxHp = 50 + (newLevel * 10);
-  const attack = 10 + (newLevel * 2);
-  const defense = 10 + (newLevel * 2);
-  const currentHp = char.current_hp + ((newLevel - char.level) * 10);
-  
-  char.level = newLevel;
-  char.exp = newExp;
-  char.max_hp = maxHp;
-  char.current_hp = Math.min(currentHp, maxHp);
-  char.attack = attack;
-  char.defense = defense;
+  char.exp += amount;
+  const need = (char.level + 1) * 5;
+  if (char.exp >= need) { char.exp -= need; char.level += 1; saveData(); return { leveledUp: true, oldLevel, newLevel: char.level }; }
   saveData();
-  return { leveledUp: newLevel > oldLevel, newLevel, oldLevel };
+  return { leveledUp: false };
 }
 
-function updateCharacterName(id, name) {
-  getOrCreateCharacter(id).name = name;
-  saveData();
-}
-
-// 배틀 관련 함수
-function resetBattleCount(id) {
-  const user = getOrCreateUser(id);
-  const today = new Date().toISOString().split('T')[0];
-  user.battle_count = 0;
-  user.last_battle_date = today;
-  saveData();
-}
-
-function incrementBattle(id) {
-  const user = getOrCreateUser(id);
-  const today = new Date().toISOString().split('T')[0];
-  if (user.last_battle_date !== today) {
-    resetBattleCount(id);
-  }
-  user.battle_count = (user.battle_count || 0) + 1;
-  user.last_battle_date = today;
-  saveData();
-}
-
-function getBattleCount(id) {
-  const user = getOrCreateUser(id);
-  const today = new Date().toISOString().split('T')[0];
-  if (user.last_battle_date !== today) {
-    resetBattleCount(id);
-  }
-  return user.battle_count || 0;
-}
-
-// 캐릭터 이름으로 ID 찾기
-function findUserByName(name) {
-  for (const [id, char] of Object.entries(characters)) {
-    if (char.name === name) {
-      return id;
-    }
-  }
-  return null;
-}
-
-// 배틀용 랜덤 상대 캐릭터 ID (자기 자신 제외)
-function getRandomCharacterId(excludeId) {
-  const ids = Object.keys(characters).filter(id => id !== excludeId);
-  if (ids.length === 0) return null;
-  return ids[Math.floor(Math.random() * ids.length)];
-}
-
-// 체력 감소
-function decreaseHp(id, amount) {
-  const char = getOrCreateCharacter(id);
-  char.current_hp = Math.max(0, char.current_hp - amount);
-  saveData();
-  return char.current_hp;
-}
-
-// 체력 회복
-function healHp(id, amount) {
-  const char = getOrCreateCharacter(id);
-  char.current_hp = Math.min(char.max_hp, char.current_hp + amount);
-  saveData();
-  return char.current_hp;
-}
-
-// 체력을 최대치로 회복
-function fullHeal(id) {
-  const char = getOrCreateCharacter(id);
-  char.current_hp = char.max_hp;
-  saveData();
-}
-
-// 자정 체력 회복 체크
-function checkDailyHeal(id) {
-  // users 객체에 직접 접근하여 무한 재귀 방지
-  if (!users[id]) {
-    users[id] = { dust: 0, last_attendance_date: null, last_exploration_date: null, exploration_count: 0, last_battle_date: null, battle_count: 0, last_heal_date: null };
-  }
-  
-  const user = users[id];
-  const today = new Date().toISOString().split('T')[0];
-  
-  // 마지막 체력 회복 날짜가 오늘이 아니면 회복
-  if (user.last_heal_date !== today) {
-    // characters 객체에 직접 접근
-    if (!characters[id]) {
-      characters[id] = { name: '모험가', level: 0, exp: 0, current_hp: 50, max_hp: 50, attack: 10, defense: 10 };
-    }
-    characters[id].current_hp = characters[id].max_hp;
-    user.last_heal_date = today;
-    saveData();
-    return true;
-  }
-  return false;
-}
-
-// 땅굴(던전) 관련 함수 - 체력만 사용
-function enterDungeon(id) {
-  const user = getOrCreateUser(id);
-  const char = getOrCreateCharacter(id);
-  
-  if (user.in_dungeon) {
-    return { success: false, message: '이미 땅굴에 있습니다.' };
-  }
-  
-  user.in_dungeon = true;
-  if (user.dungeon_floor === 0) {
-    user.dungeon_floor = 1;
-  }
-  saveData();
-  return { success: true, floor: user.dungeon_floor };
-}
-
-function exitDungeon(id) {
-  const user = getOrCreateUser(id);
-  if (!user.in_dungeon) {
-    return { success: false, message: '땅굴에 있지 않습니다.' };
-  }
-  user.in_dungeon = false;
-  saveData();
-  return { success: true, floor: user.dungeon_floor };
-}
-
-function resetDungeon(id) {
-  const user = getOrCreateUser(id);
-  user.in_dungeon = false;
-  user.dungeon_floor = 0;
-  saveData();
-}
-
-function advanceDungeonFloor(id) {
-  const user = getOrCreateUser(id);
-  user.dungeon_floor = (user.dungeon_floor || 0) + 1;
-  saveData();
-  return user.dungeon_floor;
-}
-
-function getDungeonFloor(id) {
-  const user = getOrCreateUser(id);
-  return user.dungeon_floor || 0;
-}
-
-function isInDungeon(id) {
-  const user = getOrCreateUser(id);
-  return user.in_dungeon || false;
-}
+function updateCharacterName(id, name) { getOrCreateCharacter(id).name = name; saveData(); }
 
 module.exports = {
   getOrCreateUser, getOrCreateCharacter, addDust, subtractDust, setAttendance,
   resetExplorationCount, incrementExploration, addItem, removeItem, getInventory,
-  getWeapon, equipWeapon, enhanceWeapon,
-  addExp, getRequiredExpForLevel, updateCharacterName, resetBattleCount, incrementBattle, getBattleCount,
-  findUserByName, getRandomCharacterId, decreaseHp, healHp, fullHeal, checkDailyHeal,
-  enterDungeon, exitDungeon, resetDungeon,
-  advanceDungeonFloor, getDungeonFloor, isInDungeon,
-  canUseItemToday, setLastItemUse
+  getWeapon, equipWeapon, enhanceWeapon, getOrCreateSkill, enhanceSkill,
+  addExp, updateCharacterName, loadData, saveData
 };

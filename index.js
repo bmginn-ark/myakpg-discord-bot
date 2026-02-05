@@ -21,6 +21,15 @@ const db = require('./database');
 
 // 땅굴 진행용 스레드 (userId -> { threadId, channelId })
 const dungeonThreads = new Map();
+// 무기강화 진행용 스레드
+const weaponEnhanceThreads = new Map();
+
+/** 껍질 장착 시 전투/땅굴 패배 데미지 감소 (강화 수치만큼 감소, 최소 1) */
+function getShellDamageReduction(userId) {
+  const w = db.getWeapon(userId);
+  if (!w || w.weapon_type !== '껍질') return 0;
+  return w.enhancement || 0;
+}
 
 // Gemini API 초기화
 let genAI = null;
@@ -575,6 +584,7 @@ async function handleEnhanceWeapon(message) {
     db.enhanceWeapon(userId, false, true);
     embed.setDescription(`💥 무기가 파괴되었습니다!\n\n${costInfo}`)
       .setColor(0xFF0000);
+    weaponEnhanceThreads.delete(userId);
   } else if (rand < chance) {
     const result = db.enhanceWeapon(userId, true, false);
     embed.setDescription(`✅ 강화 성공! +${result.newLevel}강\n\n${costInfo}`)
@@ -585,7 +595,13 @@ async function handleEnhanceWeapon(message) {
       .setColor(0xFFFF00);
   }
   
-  message.reply({ embeds: [embed] });
+  const thread = await getOrCreateWeaponEnhanceThread(message, userId);
+  if (thread) {
+    await thread.send({ embeds: [embed] });
+    await message.reply('**무기강화 스레드**에서 결과를 확인하세요. 계속 강화하려면 스레드에서 `!무기강화`를 입력하세요.');
+  } else {
+    await message.reply({ embeds: [embed] });
+  }
 }
 
 // 관리자 권한 체크
@@ -835,13 +851,20 @@ async function handleBattle(message, args) {
     
     embed.setDescription(description);
   } else {
-    // 방어자 승리 (공격자 패배) - 체력 감소
+    // 방어자 승리 (공격자 패배) - 체력 감소 (껍질 장착 시 감소 보정)
     const hpBefore = attacker.current_hp;
-    const hpAfter = db.decreaseHp(userId, 5);
+    const baseDmg = 5;
+    const reduction = getShellDamageReduction(userId);
+    const dmg = Math.max(1, baseDmg - reduction);
+    const hpAfter = db.decreaseHp(userId, dmg);
     
     let description = `**${attacker.name}**이(가) **${defender.name}**에게 패배했습니다... 😢\n\n`;
     description += `📊 상대방 정보: ${defenderInfo}\n\n`;
-    description += `💔 체력이 5 감소했습니다! (${hpBefore} → ${hpAfter})\n`;
+    if (reduction > 0) {
+      description += `🛡️ 껍질 보정으로 체력 ${baseDmg} → ${dmg} 감소! (${hpBefore} → ${hpAfter})\n`;
+    } else {
+      description += `💔 체력이 ${dmg} 감소했습니다! (${hpBefore} → ${hpAfter})\n`;
+    }
     
     if (hpAfter === 0) {
       description += `\n⚠️ 체력이 0이 되었습니다! 자정이 지나면 회복됩니다.`;
@@ -1030,18 +1053,22 @@ function makeRecoveryEffect(itemName) {
   if (!info) return null;
   return (message, userId, opts = {}) => {
     const actualName = opts.actualItemName || itemName;
+    const quantity = Math.max(1, Math.min(99, opts.quantity || 1));
     const character = db.getOrCreateCharacter(userId);
     if (character.current_hp >= character.max_hp) {
       return { ok: false, message: '이미 체력이 최대입니다!' };
     }
-    db.removeItem(userId, actualName, 1);
+    const need = character.max_hp - character.current_hp;
+    const totalHeal = Math.min(quantity * info.heal, need);
+    const useCount = Math.min(quantity, Math.ceil(totalHeal / info.heal));
+    if (useCount < 1) return { ok: false, message: '이미 체력이 최대입니다!' };
+    db.removeItem(userId, actualName, useCount);
     const hpBefore = character.current_hp;
-    const hpAfter = db.healHp(userId, info.heal);
-    return {
-      ok: true,
-      description: `${info.emoji} **${itemName}**을(를) 사용했습니다!\n\n체력: ${hpBefore} → ${hpAfter} / ${character.max_hp}`,
-      color: 0x00FF00
-    };
+    const hpAfter = db.healHp(userId, totalHeal);
+    const desc = useCount > 1
+      ? `${info.emoji} **${itemName}** ${useCount}개를 사용했습니다!\n\n체력: ${hpBefore} → ${hpAfter} / ${character.max_hp}`
+      : `${info.emoji} **${itemName}**을(를) 사용했습니다!\n\n체력: ${hpBefore} → ${hpAfter} / ${character.max_hp}`;
+    return { ok: true, description: desc, color: 0x00FF00 };
   };
 }
 for (const name of Object.keys(recoveryItems)) {
@@ -1050,9 +1077,18 @@ for (const name of Object.keys(recoveryItems)) {
 
 async function handleUseItem(message, args) {
   try {
-    const itemName = args.join(' ').trim();
+    const parts = [...args];
+    let quantity = 1;
+    if (parts.length > 0 && /^\d+$/.test(parts[parts.length - 1])) {
+      const num = parseInt(parts[parts.length - 1], 10);
+      if (num >= 1) {
+        quantity = Math.min(num, 99);
+        parts.pop();
+      }
+    }
+    const itemName = parts.join(' ').trim();
     if (!itemName) {
-      await message.reply('사용할 아이템 이름을 입력하세요. (예: `!사용 모험기록`)');
+      await message.reply('사용할 아이템 이름을 입력하세요. (예: `!사용 나무열매 4`)');
       return;
     }
     const userId = message.author.id;
@@ -1072,7 +1108,12 @@ async function handleUseItem(message, args) {
       await message.reply('사용할 수 없는 아이템입니다.');
       return;
     }
-    const result = handler.effect(message, userId, { actualItemName: entry.item_name });
+    const useQty = (recoveryItems[handlerKey] ? quantity : 1);
+    if (entry.quantity < useQty) {
+      await message.reply(`**${itemName}** 보유 수량이 부족합니다. (보유: ${entry.quantity}개, 요청: ${useQty}개)`);
+      return;
+    }
+    const result = handler.effect(message, userId, { actualItemName: entry.item_name, quantity: useQty });
     if (!result || typeof result !== 'object') {
       await message.reply('아이템 사용 처리 중 오류가 발생했습니다.');
       return;
@@ -1177,7 +1218,7 @@ async function handleHelp(message) {
       },
       {
         name: '⚔️ 무기',
-        value: '`!무기` - 장착 무기 확인\n`!무기장착 [가시/껍질]` - 무기 장착\n`!무기강화` - 강화 (최대 +20강)',
+        value: '`!무기` - 장착 무기 확인\n`!무기장착 [가시/껍질]` - 무기 장착\n`!무기강화` - 강화 (최대 +20강, 스레드에서 진행)',
         inline: false
       },
       {
@@ -1187,12 +1228,12 @@ async function handleHelp(message) {
       },
       {
         name: '🏪 상점 / 아이템',
-        value: '`!상점` - 상점\n`!구매 [아이템명] (수량)` - 구매 (예: !구매 나무열매 5)\n`!판매 [아이템명] (수량)` - 되팔기/잡동사니 교환\n`!박스열기` / `!사용 랜덤박스` - 랜덤박스 열기\n`!사용 [아이템이름]` - 아이템 사용 (예: 모험기록, 랜덤박스)',
+        value: '`!상점` - 상점\n`!구매 [아이템명] (수량)` - 구매\n`!판매 [아이템명] (수량)` - 되팔기/잡동사니 교환\n`!박스열기` / `!사용 랜덤박스` - 랜덤박스 열기\n`!사용 [아이템이름] (수량)` - 아이템 사용 (예: !사용 나무열매 4)',
         inline: false
       },
       {
         name: '💊 회복',
-        value: '`!회복` - 나무열매 1개 사용 (체력 50)\n`!사용 [회복약]` - 나무열매/열매주스/열매머핀/작은열매 (체력 50/100/200/20)',
+        value: '`!회복` - 나무열매 1개 사용 (체력 50)\n`!사용 [회복약] (수량)` - 나무열매/열매주스/열매머핀/작은열매 (체력 50/100/200/20)',
         inline: false
       },
       {
@@ -1265,6 +1306,32 @@ async function getOrCreateDungeonThread(message, userId) {
   if (thread) {
     dungeonThreads.set(userId, { threadId: thread.id, channelId: channel.id });
   }
+  return thread;
+}
+
+// 무기강화 스레드 가져오기 또는 생성
+async function getOrCreateWeaponEnhanceThread(message, userId) {
+  const existing = weaponEnhanceThreads.get(userId);
+  if (existing) {
+    try {
+      const thread = await message.client.channels.fetch(existing.threadId);
+      return thread;
+    } catch (e) {
+      weaponEnhanceThreads.delete(userId);
+    }
+  }
+  const channel = message.channel;
+  if (!channel.threads || typeof channel.threads.create !== 'function') return null;
+  const character = db.getOrCreateCharacter(userId);
+  const weapon = db.getWeapon(userId);
+  const weaponLabel = weapon ? `${weapon.weapon_type}+${weapon.enhancement}` : '무기';
+  const threadName = `⚔️ 강화 - ${character.name} (${weaponLabel})`.slice(0, 100);
+  const thread = await channel.threads.create({
+    name: threadName,
+    type: ChannelType.PublicThread,
+    reason: '무기 강화'
+  }).catch(() => null);
+  if (thread) weaponEnhanceThreads.set(userId, { threadId: thread.id, channelId: channel.id });
   return thread;
 }
 
@@ -1393,11 +1460,15 @@ async function handleDungeonExplore(message) {
         `체력: ${db.getOrCreateCharacter(userId).current_hp}/${character.max_hp}`)
         .setColor(0x00FF00);
     } else {
-      const dmg = 10;
+      const baseDmg = 10;
+      const reduction = getShellDamageReduction(userId);
+      const dmg = Math.max(1, baseDmg - reduction);
       const hpAfterBattle = db.decreaseHp(userId, dmg);
+      let dmgLine = `💔 체력 ${dmg} 감소! (${character.current_hp} → ${hpAfterBattle})`;
+      if (reduction > 0) dmgLine = `🛡️ 껍질 보정 (${baseDmg}→${dmg}) ${dmgLine}`;
       embed.setDescription(`⚔️ ${battleComment}\n\n` +
         `❌ ${monsterName}에게 당했습니다...\n\n` +
-        `💔 체력 ${dmg} 감소! (${character.current_hp} → ${hpAfterBattle})\n\n` +
+        `${dmgLine}\n\n` +
         `체력: ${hpAfterBattle}/${character.max_hp}`)
         .setColor(0xFF0000);
       if (hpAfterBattle <= 0) {

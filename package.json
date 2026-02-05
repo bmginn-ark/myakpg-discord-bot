@@ -1,18 +1,24 @@
 {
-  "name": "myakpg",
+  "name": "myakpg-discord-bot",
   "version": "1.0.0",
-  "description": "",
-  "license": "ISC",
+  "description": "디스코드 RPG 봇",
+  "keywords": [
+    "discord",
+    "bot",
+    "rpg"
+  ],
+  "license": "MIT",
   "author": "",
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "install:prod": "npm install --omit=dev"
+    "dev": "node index.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "better-sqlite3": "^9.2.2",
     "discord.js": "^14.25.1",
-    "@google/generative-ai": "^0.21.0"
+    "dotenv": "^16.6.1"
   }
 }
