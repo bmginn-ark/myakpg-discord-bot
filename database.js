@@ -37,7 +37,18 @@ function getOrCreateUser(id) {
 }
 
 function getOrCreateCharacter(id) {
-  if (!data.characters[id]) data.characters[id] = { name: `플레이어_${id.slice(-4)}`, level: 1, exp: 0, current_hp: 100, max_hp: 100, attack: 10, defense: 5, magic: 3 };
+  if (!data.characters[id]) {
+    data.characters[id] = {
+      name: '모험가',
+      level: 0,
+      exp: 0,
+      current_hp: 50,
+      max_hp: 50,
+      attack: 10,
+      defense: 10
+    };
+    saveData();
+  }
   return data.characters[id];
 }
 
@@ -106,13 +117,13 @@ function addExp(id, amount) {
   }
   char.level = newLevel;
   char.exp = newExp;
-  const maxHp = 50 + (newLevel * 10);
-  const attack = 10 + (newLevel * 2);
-  const defense = 10 + (newLevel * 2);
-  char.max_hp = maxHp;
-  char.attack = attack;
-  char.defense = defense;
   if (newLevel > oldLevel) {
+    const maxHp = 50 + (newLevel * 10);
+    const attack = 10 + (newLevel * 2);
+    const defense = 10 + (newLevel * 2);
+    char.max_hp = maxHp;
+    char.attack = attack;
+    char.defense = defense;
     char.current_hp = Math.min(char.current_hp + (newLevel - oldLevel) * 10, maxHp);
   }
   saveData();
