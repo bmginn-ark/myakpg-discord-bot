@@ -98,36 +98,22 @@ function getOrCreateSkill(id) {
 }
 function enhanceSkill(id, success) { if (!data.skills[id]) getOrCreateSkill(id); if (success) data.skills[id].skill_level += 1; saveData(); }
 
-// 레벨업 필요 경험치: 5, 10, 20, 35, 55, 80, … (차이 +5, +10, +15 …)
-function getRequiredExpForLevel(level) {
-  return 5 + 5 * level * (level + 1) / 2;
-}
-
+// 레벨업: 필요 경험치 = (현재 레벨 + 1) × 5 (최대 레벨 20)
 function addExp(id, amount) {
   const char = getOrCreateCharacter(id);
   const oldLevel = char.level;
-  let newExp = char.exp + amount;
-  let newLevel = char.level;
-  while (newLevel < 20) {
-    const need = getRequiredExpForLevel(newLevel);
-    if (newExp >= need) {
-      newExp -= need;
-      newLevel += 1;
-    } else break;
-  }
-  char.level = newLevel;
-  char.exp = newExp;
-  if (newLevel > oldLevel) {
-    const maxHp = 50 + (newLevel * 10);
-    const attack = 10 + (newLevel * 2);
-    const defense = 10 + (newLevel * 2);
-    char.max_hp = maxHp;
-    char.attack = attack;
-    char.defense = defense;
-    char.current_hp = Math.min(char.current_hp + (newLevel - oldLevel) * 10, maxHp);
+  char.exp += amount;
+  const need = (char.level + 1) * 5;
+  if (char.exp >= need && char.level < 20) {
+    char.exp -= need;
+    char.level += 1;
+    char.max_hp = 50 + (char.level * 10);
+    char.attack = 10 + (char.level * 2);
+    char.defense = 10 + (char.level * 2);
+    char.current_hp = Math.min(char.current_hp + 10, char.max_hp);
   }
   saveData();
-  return { leveledUp: newLevel > oldLevel, oldLevel, newLevel };
+  return { leveledUp: char.level > oldLevel, oldLevel, newLevel: char.level };
 }
 
 function updateCharacterName(id, name) { getOrCreateCharacter(id).name = name; saveData(); }
@@ -136,5 +122,5 @@ module.exports = {
   getOrCreateUser, getOrCreateCharacter, addDust, subtractDust, setAttendance,
   resetExplorationCount, incrementExploration, addItem, removeItem, getInventory,
   getWeapon, equipWeapon, enhanceWeapon, getOrCreateSkill, enhanceSkill,
-  getRequiredExpForLevel, addExp, updateCharacterName, loadData, saveData
+  addExp, updateCharacterName, loadData, saveData
 };
