@@ -17,8 +17,6 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "better-sqlite3": "^9.2.2",
-    "discord.js": "^14.25.1",
-    "dotenv": "^16.6.1"
+    "discord.js": "^14.25.1"
   }
 }
